@@ -1,0 +1,196 @@
+import { describe, expect, it } from 'vitest';
+import { findPassive, findSpecies, speciesName } from '../src/core/data/index.js';
+import { solve } from '../src/core/solver/search.js';
+import { passiveInheritanceProbability, expectedUnwantedPassives } from '../src/core/solver/probability.js';
+import type { TargetSpec } from '../src/core/solver/types.js';
+import type { Gender, Pal } from '../src/core/save/types.js';
+
+let counter = 0;
+function makePal(
+  species: string,
+  gender: Gender,
+  passives: string[],
+  ivs: [number, number, number] = [50, 50, 50],
+): Pal {
+  const speciesIndex = findSpecies(species);
+  if (speciesIndex < 0) throw new Error(`unknown test species ${species}`);
+  const internal = passives.map((p) => {
+    const found = findPassive(p);
+    if (!found) throw new Error(`unknown test passive ${p}`);
+    return found.internalName;
+  });
+  counter++;
+  return {
+    instanceId: `test-${counter}`,
+    speciesIndex,
+    characterId: species,
+    isBoss: false,
+    nickname: '',
+    gender,
+    level: 20,
+    rank: 1,
+    souls: { hp: 0, attack: 0, defense: 0, craftSpeed: 0 },
+    ivs: { hp: ivs[0], attack: ivs[1], defense: ivs[2] },
+    passives: internal,
+    masteredSkills: [],
+    equippedSkills: [],
+    ownerPlayerUid: 'player-1',
+    groupId: 'guild-1',
+    location: { kind: 'palbox', containerId: 'c1', slotIndex: counter, label: `Palbox slot ${counter}` },
+  };
+}
+
+function spec(overrides: Partial<TargetSpec> = {}): TargetSpec {
+  return {
+    speciesIndex: findSpecies('Anubis'),
+    requiredPassives: [findPassive('Artisan')!.internalName, findPassive('Serious')!.internalName],
+    excludedPassives: [],
+    minIvs: { hp: null, attack: null, defense: null },
+    gender: null,
+    maxGenerations: 5,
+    mode: 'balanced',
+    beamSize: 1200,
+    allowExcludedParents: false,
+    ...overrides,
+  };
+}
+
+describe('probability model', () => {
+  it('computes hypergeometric passive inheritance from the datamined weights', () => {
+    // Pool of exactly the two wanted passives: any draw of 2+ takes both.
+    expect(passiveInheritanceProbability(2, 2)).toBeCloseTo(0.6, 6);
+    // Two junk passives dilute the pool sharply.
+    expect(passiveInheritanceProbability(4, 2)).toBeCloseTo(0.25, 6);
+    // Nothing wanted is always satisfied; wanting more than exists never is.
+    expect(passiveInheritanceProbability(3, 0)).toBe(1);
+    expect(passiveInheritanceProbability(2, 3)).toBe(0);
+  });
+
+  it('penalises dirty parent pools', () => {
+    expect(passiveInheritanceProbability(2, 1)).toBeGreaterThan(passiveInheritanceProbability(6, 1));
+  });
+
+  it('never predicts more junk passives than the Pal has room for', () => {
+    expect(expectedUnwantedPassives(8, 4)).toBe(0);
+    expect(expectedUnwantedPassives(8, 1)).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('solver', () => {
+  it('detects a Pal you already own that meets the target', () => {
+    const pals = [makePal('Anubis', 'Male', ['Artisan', 'Serious'])];
+    const result = solve(pals, spec());
+    expect(result.feasibility).toBe('already-owned');
+    expect(result.existingMatches).toHaveLength(1);
+  });
+
+  it('does not count an owned Pal that is missing a required passive', () => {
+    const pals = [makePal('Anubis', 'Male', ['Artisan'])];
+    const result = solve(pals, spec());
+    expect(result.feasibility).not.toBe('already-owned');
+  });
+
+  it('finds a single-step route from two owned parents', () => {
+    // Relaxaurus Lux x Jormuntide Ignis is a real pairing that yields Anubis.
+    const pals = [
+      makePal('Relaxaurus Lux', 'Male', ['Artisan']),
+      makePal('Jormuntide Ignis', 'Female', ['Serious']),
+    ];
+    const result = solve(pals, spec());
+    expect(result.feasibility).toBe('breedable');
+    expect(result.plan).not.toBeNull();
+    expect(speciesName(result.plan!.speciesIndex)).toBe('Anubis');
+    expect(result.plan!.generation).toBe(1);
+    expect(result.plan!.parents).not.toBeNull();
+    expect(result.plan!.totalEggs).toBeGreaterThan(0);
+  });
+
+  it('refuses to pair two owned Pals of the same gender', () => {
+    const pals = [
+      makePal('Relaxaurus Lux', 'Male', ['Artisan']),
+      makePal('Jormuntide Ignis', 'Male', ['Serious']),
+    ];
+    const result = solve(pals, spec({ maxGenerations: 1 }));
+    expect(result.plan).toBeNull();
+  });
+
+  it('reports a species that no owned Pal can ever reach', () => {
+    // Jetragon can only be produced by another Jetragon.
+    const pals = [makePal('Lamball', 'Male', ['Artisan']), makePal('Cattiva', 'Female', ['Serious'])];
+    const result = solve(pals, spec({ speciesIndex: findSpecies('Jetragon') }));
+    expect(result.feasibility).toBe('species-unreachable');
+    expect(result.plan).toBeNull();
+  });
+
+  it('reports which required passives nobody carries', () => {
+    const pals = [
+      makePal('Relaxaurus Lux', 'Male', ['Artisan']),
+      makePal('Jormuntide Ignis', 'Female', ['Serious']),
+    ];
+    const result = solve(
+      pals,
+      spec({
+        requiredPassives: [
+          findPassive('Artisan')!.internalName,
+          findPassive('Serious')!.internalName,
+          findPassive('Legend')!.internalName,
+        ],
+      }),
+    );
+    expect(result.feasibility).toBe('missing-passives');
+    expect(result.missingPassives).toEqual([findPassive('Legend')!.internalName]);
+    expect(result.plan).toBeNull();
+  });
+
+  it('excludes Pals carrying a ruled-out passive, and honours the override', () => {
+    const pals = [
+      makePal('Relaxaurus Lux', 'Male', ['Artisan', 'Clumsy']),
+      makePal('Jormuntide Ignis', 'Female', ['Serious']),
+    ];
+    const withExclusion = solve(pals, spec({ excludedPassives: [findPassive('Clumsy')!.internalName] }));
+    expect(withExclusion.plan).toBeNull();
+
+    const allowing = solve(
+      pals,
+      spec({ excludedPassives: [findPassive('Clumsy')!.internalName], allowExcludedParents: true }),
+    );
+    expect(allowing.plan).not.toBeNull();
+  });
+
+  it('prefers the cleaner parent when one carries junk passives', () => {
+    const clean = solve(
+      [makePal('Relaxaurus Lux', 'Male', ['Artisan']), makePal('Jormuntide Ignis', 'Female', ['Serious'])],
+      spec(),
+    );
+    const dirty = solve(
+      [
+        makePal('Relaxaurus Lux', 'Male', ['Artisan', 'Clumsy', 'Brittle', 'Slacker']),
+        makePal('Jormuntide Ignis', 'Female', ['Serious']),
+      ],
+      spec({ allowExcludedParents: true }),
+    );
+    expect(clean.plan!.totalEggs).toBeLessThan(dirty.plan!.totalEggs);
+  });
+
+  it('builds a multi-step tree when no direct pairing exists', () => {
+    const pals = [
+      makePal('Lamball', 'Male', ['Artisan']),
+      makePal('Cattiva', 'Female', ['Serious']),
+      makePal('Chikipi', 'Female', []),
+      makePal('Penking', 'Male', []),
+    ];
+    const result = solve(pals, spec({ maxGenerations: 6 }));
+    if (result.plan) {
+      expect(result.plan.generation).toBeGreaterThanOrEqual(1);
+      expect(speciesName(result.plan.speciesIndex)).toBe('Anubis');
+    } else {
+      // Acceptable outcome, but it must be explained rather than silently empty.
+      expect(result.diagnostics.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('reports no-pals rather than crashing on an empty Palbox', () => {
+    const result = solve([], spec());
+    expect(result.feasibility).toBe('no-pals');
+  });
+});

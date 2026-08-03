@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-web/
+*.log
+
+# Real saves must never be committed: they contain other players' names and UIDs.
+# tests/fixtures/ is synthetic and is intentionally tracked.
+*.sav
+!tests/fixtures/**/*.sav

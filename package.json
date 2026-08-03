@@ -1,0 +1,40 @@
+{
+  "name": "palforge",
+  "version": "0.1.0",
+  "description": "Breeding-plan optimizer for Palworld that reads your actual save file",
+  "type": "module",
+  "bin": {
+    "palforge": "./dist/node/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/node/cli.ts",
+    "gen-data": "tsx scripts/gen-data.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
+    "web:dev": "vite",
+    "web:build": "vite build",
+    "web:preview": "vite preview"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ooz-wasm": "^2.0.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.5",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+/*
+ * PalForge is a dense data tool, so the palette is a low-glare dark slate with a single
+ * warm accent reserved for "this is the thing you act on".
+ */
+@theme {
+  --color-surface-0: oklch(0.17 0.012 260);
+  --color-surface-1: oklch(0.21 0.014 260);
+  --color-surface-2: oklch(0.26 0.016 260);
+  --color-surface-3: oklch(0.32 0.018 260);
+  --color-edge: oklch(0.36 0.02 260);
+
+  --color-ink-0: oklch(0.96 0.005 260);
+  --color-ink-1: oklch(0.78 0.012 260);
+  --color-ink-2: oklch(0.62 0.014 260);
+
+  --color-accent: oklch(0.76 0.16 62);
+  --color-accent-dim: oklch(0.5 0.1 62);
+
+  --color-good: oklch(0.76 0.15 155);
+  --color-warn: oklch(0.8 0.14 85);
+  --color-bad: oklch(0.68 0.17 25);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-surface-0);
+  color: var(--color-ink-0);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures keep IV columns from jittering as values change. */
+.nums {
+  font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface-0);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-3);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-edge);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
