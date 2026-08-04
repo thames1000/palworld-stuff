@@ -7,7 +7,7 @@
  * the CLI and the web UI actually render.
  */
 import type { Pal } from '../save/types.js';
-import type { PlanNode } from './types.js';
+import type { GenderRequirement, PlanNode } from './types.js';
 
 export type PlanStepRef =
   | { kind: 'owned'; pal: Pal }
@@ -22,8 +22,22 @@ export interface PlanStep {
   parents: [PlanStepRef, PlanStepRef];
   /** Expected eggs for this step alone. */
   expectedEggs: number;
-  /** Chance any single hatch is a keeper. */
-  successPerEgg: number;
+  /**
+   * Chance a hatch carries every passive this step wants.
+   *
+   * The child's species is fixed by the pairing, so this is the only thing that is actually
+   * uncertain about an individual egg -- 1 when nothing is riding on the passives.
+   */
+  passiveSuccess: number;
+  /**
+   * What it costs to get this step's parents to opposite sexes, and why.
+   *
+   * Separate from `passiveSuccess` on purpose: it is a property of the parents, not of this
+   * step's hatch, and multiplying the two into a single "per hatch" figure reads as though
+   * the egg might come out the wrong species. It never does.
+   */
+  genderFactor: number;
+  genderRequirement: GenderRequirement | null;
   expectedUnwanted: number;
   isFinal: boolean;
 }
@@ -54,7 +68,9 @@ export function flattenPlan(plan: PlanNode): PlanStep[] {
     mask: node.mask,
     parents: [refFor(node.parents![0]), refFor(node.parents![1])],
     expectedEggs: node.stepEggs,
-    successPerEgg: node.stepEggs > 0 ? 1 / node.stepEggs : 1,
+    passiveSuccess: node.passiveSuccess,
+    genderFactor: node.genderFactor,
+    genderRequirement: node.genderRequirement,
     expectedUnwanted: node.expectedUnwanted,
     isFinal: node === plan,
   }));

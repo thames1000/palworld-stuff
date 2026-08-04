@@ -18,6 +18,7 @@ function Combobox({
   value,
   onValueChange,
   emptyMessage = 'No matches',
+  autoFocus = false,
 }: {
   options: Option[];
   onChoose: (option: Option) => void;
@@ -25,6 +26,7 @@ function Combobox({
   value: string;
   onValueChange: (v: string) => void;
   emptyMessage?: string;
+  autoFocus?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -69,6 +71,7 @@ function Combobox({
       <TextInput
         value={value}
         placeholder={placeholder}
+        autoFocus={autoFocus}
         onChange={(e) => {
           onValueChange(e.target.value);
           setOpen(true);
@@ -134,9 +137,11 @@ const SPECIES_OPTIONS: Option[] = SPECIES.map((s, i) => ({
 export function SpeciesPicker({
   value,
   onChange,
+  autoFocus = false,
 }: {
   value: number;
   onChange: (speciesIndex: number) => void;
+  autoFocus?: boolean;
 }) {
   const [query, setQuery] = useState(SPECIES[value]?.name ?? '');
 
@@ -157,6 +162,7 @@ export function SpeciesPicker({
       }}
       placeholder="Search species…"
       emptyMessage="No species with that name"
+      autoFocus={autoFocus}
     />
   );
 }

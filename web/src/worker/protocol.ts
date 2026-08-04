@@ -12,6 +12,17 @@ export interface Scope {
   includeParty: boolean;
 }
 
+/**
+ * Where the solver's candidate Pals come from.
+ *
+ * A parsed save stays resident in the worker and is scoped there, so only the filter
+ * crosses the boundary. A hand-entered roster has no worker-side copy, so it is sent
+ * whole -- which is cheap, because a roster is something a person typed.
+ */
+export type SolveSource =
+  | { kind: 'save'; scope: Scope }
+  | { kind: 'roster'; pals: Pal[] };
+
 export interface SolveSummary {
   feasibility: Feasibility;
   /** Flattened breeding steps, ready to render. Empty when there is no plan. */
@@ -41,7 +52,7 @@ export type WorkerRequest =
       level: ArrayBuffer;
       players: Array<{ name: string; data: ArrayBuffer }>;
     }
-  | { kind: 'solve'; spec: TargetSpec; scope: Scope };
+  | { kind: 'solve'; spec: TargetSpec; source: SolveSource };
 
 export type WorkerResponse =
   | { kind: 'progress'; stage: string; detail?: string }

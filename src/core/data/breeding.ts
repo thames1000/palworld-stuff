@@ -6,7 +6,7 @@
  * never has to download or decode them.
  */
 import { BREEDING_MATRIX_PACKED, MATRIX_SIZE, MIN_STEPS_PACKED } from './matrices.js';
-import { MECHANICS } from './index.js';
+import { GENDERED_COMBOS, MECHANICS, type GenderedCombo } from './index.js';
 
 /**
  * Unpacks a base64 little-endian int16 square matrix into per-row views.
@@ -47,6 +47,58 @@ export const MIN_BREEDING_STEPS: readonly Int16Array[] = unpackMatrix(
 /** The child species produced by breeding two species, or -1 if the pair cannot breed. */
 export function breedingResult(a: number, b: number): number {
   return BREEDING_MATRIX[a]?.[b] ?? -1;
+}
+
+/** An unordered pair of parent species. `a <= b` always, so pairs never appear twice. */
+export type ParentPair = readonly [number, number];
+
+/**
+ * Reverse of the breeding table: child species -> every parent pair that makes it.
+ *
+ * Built on first use rather than at import, because the plan search never needs it and the
+ * walk is 41,616 pairs. The table is symmetric (verified over the whole matrix), so only
+ * the upper triangle is stored and `Anubis x Quivern` and `Quivern x Anubis` are one entry.
+ */
+let reverseIndex: Map<number, ParentPair[]> | null = null;
+
+function buildReverseIndex(): Map<number, ParentPair[]> {
+  const index = new Map<number, ParentPair[]>();
+  for (let a = 0; a < MATRIX_SIZE; a++) {
+    const row = BREEDING_MATRIX[a];
+    if (!row) continue;
+    for (let b = a; b < MATRIX_SIZE; b++) {
+      const child = row[b] ?? -1;
+      if (child < 0) continue;
+      const pairs = index.get(child);
+      if (pairs) pairs.push([a, b]);
+      else index.set(child, [[a, b]]);
+    }
+  }
+  return index;
+}
+
+/**
+ * Every parent pair that produces `child`, cheapest-looking first.
+ *
+ * The list is long for common Pals -- over a thousand pairs for some -- so callers are
+ * expected to filter it down to what the player can actually field.
+ */
+export function parentPairsFor(child: number): readonly ParentPair[] {
+  reverseIndex ??= buildReverseIndex();
+  return reverseIndex.get(child) ?? [];
+}
+
+/**
+ * The handful of pairs whose child depends on which parent is male.
+ *
+ * `BREEDING_MATRIX` records only one outcome for such a pair, so anything that shows a
+ * pairing to the player has to surface this separately or it will quietly promise the
+ * wrong Pal half the time.
+ */
+export function genderedCombosFor(a: number, b: number): readonly GenderedCombo[] {
+  return GENDERED_COMBOS.filter(
+    (c) => (c.parentA === a && c.parentB === b) || (c.parentA === b && c.parentB === a),
+  );
 }
 
 export function isReachable(from: number, to: number): boolean {

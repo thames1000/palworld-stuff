@@ -16,11 +16,14 @@ const SAVE_LOCATIONS: Array<{ platform: string; path: string }> = [
 
 export function DropZone({
   onPick,
+  onSkip,
   busy,
   progress,
   error,
 }: {
   onPick: (picked: PickedSave) => void;
+  /** Continue without a save, entering Pals and pairings by hand. */
+  onSkip: () => void;
   busy: boolean;
   progress: { stage: string; detail?: string } | null;
   error: string | null;
@@ -110,6 +113,19 @@ export function DropZone({
       {shown && (
         <div className="mt-4 rounded-lg border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-bad">
           {shown}
+        </div>
+      )}
+
+      {!busy && (
+        <div className="mt-4 rounded-lg border border-edge/60 bg-surface-1 px-4 py-3 text-center">
+          <p className="text-sm text-ink-1">No save handy?</p>
+          <p className="mx-auto mt-1 max-w-md text-xs text-ink-2">
+            Enter the Pals you own yourself, or walk the breeding table by hand to work out a route
+            — same plans, same egg math, nothing to load.
+          </p>
+          <div className="mt-3">
+            <Button onClick={onSkip}>Plan without a save</Button>
+          </div>
         </div>
       )}
 

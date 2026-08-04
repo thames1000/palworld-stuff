@@ -1,4 +1,7 @@
 import type { Pal } from '../save/types.js';
+import type { GenderRequirement } from './pairing.js';
+
+export type { GenderRequirement } from './pairing.js';
 
 export type OptimizationMode = 'generations' | 'eggs' | 'clean' | 'balanced';
 
@@ -34,6 +37,21 @@ export interface PlanNode {
   poolSize: number;
   /** Expected eggs for this single breeding step. 0 for an owned Pal. */
   stepEggs: number;
+  /**
+   * Chance a hatch at this step carries every wanted passive.
+   *
+   * The child's species is determined by the parents, so this is the only genuine per-egg
+   * uncertainty. 1 for an owned Pal, and for a step with no passives riding on it.
+   */
+  passiveSuccess: number;
+  /**
+   * Cost of getting this step's parents to opposite sexes.
+   *
+   * Kept apart from `passiveSuccess` because it is a property of the parents rather than of
+   * this step's egg, and reporting the product as a per-hatch rate misleads.
+   */
+  genderFactor: number;
+  genderRequirement: GenderRequirement | null;
   /** Expected eggs for this whole subtree, including this step. */
   totalEggs: number;
   /** Expected junk passives on this node's Pal. */

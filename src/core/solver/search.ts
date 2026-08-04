@@ -19,11 +19,11 @@
 import { MECHANICS, SPECIES } from '../data/index.js';
 import { breedingResult, isReachable, minBreedingSteps } from '../data/breeding.js';
 import type { Pal } from '../save/types.js';
+import { breedingStep, leavesCanBreed } from './pairing.js';
 import {
   expectedUnwantedPassives,
   genderProbability,
   ivProbability,
-  passiveInheritanceProbability,
   popcount,
 } from './probability.js';
 import type { OptimizationMode, PlanNode, SolveResult, TargetSpec } from './types.js';
@@ -57,36 +57,6 @@ function cost(node: PlanNode, mode: OptimizationMode): number {
 
 function stateKey(speciesIndex: number, mask: number, maskCount: number): number {
   return speciesIndex * (1 << maskCount) + mask;
-}
-
-/** Two owned Pals can only breed if they are one male and one female. */
-function leavesCanBreed(a: PlanNode, b: PlanNode): boolean {
-  if (!a.source || !b.source) return true;
-  if (a.source.instanceId === b.source.instanceId) return false;
-  if (a.source.gender === 'Unknown' || b.source.gender === 'Unknown') return true;
-  return a.source.gender !== b.source.gender;
-}
-
-/**
- * Gender cost of a pairing.
- *
- * When one parent is an owned Pal its gender is fixed, so a bred partner has to come out
- * the opposite sex -- that is a real multiplier on how many eggs the partner takes. Two
- * bred parents can be steered to opposite sexes, which costs roughly one coin flip.
- */
-function genderFactor(a: PlanNode, b: PlanNode): number {
-  const aFixed = a.source?.gender;
-  const bFixed = b.source?.gender;
-  if (aFixed && bFixed) return 1; // already validated as opposite
-  if (aFixed && aFixed !== 'Unknown') {
-    const need = aFixed === 'Male' ? 'Female' : 'Male';
-    return genderProbability(b.speciesIndex, need);
-  }
-  if (bFixed && bFixed !== 'Unknown') {
-    const need = bFixed === 'Male' ? 'Female' : 'Male';
-    return genderProbability(a.speciesIndex, need);
-  }
-  return 0.5;
 }
 
 export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
@@ -209,6 +179,9 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
       generation: 0,
       poolSize: pal.passives.length,
       stepEggs: 0,
+      passiveSuccess: 1,
+      genderFactor: 1,
+      genderRequirement: null,
       totalEggs: 0,
       expectedUnwanted: pal.passives.length - popcount(mask),
       source: pal,
@@ -260,22 +233,20 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
           continue;
         }
 
-        const overlap = popcount(a.mask & b.mask);
-        const pool = Math.max(1, a.poolSize + b.poolSize - overlap);
-        let pStep = passiveInheritanceProbability(pool, desiredCount);
-        if (pStep <= 0) continue;
-        pStep *= genderFactor(a, b);
-        if (pStep <= 0) continue;
+        const step = breedingStep(a, b, childMask);
+        if (step.successPerEgg <= 0) continue;
 
-        const stepEggs = 1 / pStep;
         const child: PlanNode = {
           speciesIndex: childSpecies,
           mask: childMask,
           generation: Math.max(a.generation, b.generation) + 1,
           poolSize: Math.max(1, desiredCount),
-          stepEggs,
-          totalEggs: a.totalEggs + b.totalEggs + stepEggs,
-          expectedUnwanted: expectedUnwantedPassives(pool, desiredCount),
+          stepEggs: step.stepEggs,
+          passiveSuccess: step.passiveSuccess,
+          genderFactor: step.genderFactor,
+          genderRequirement: step.genderRequirement,
+          totalEggs: a.totalEggs + b.totalEggs + step.stepEggs,
+          expectedUnwanted: expectedUnwantedPassives(step.pool, desiredCount),
           source: null,
           parents: [a, b],
           requiredGender: null,

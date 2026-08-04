@@ -1,6 +1,7 @@
 /** Small shared primitives so the panels stay visually consistent. */
-import type { ReactNode } from 'react';
-import { passiveByInternalName, passiveDisplayName } from '@core/data/index';
+import { useEffect, type ReactNode } from 'react';
+import { passiveByInternalName, passiveDisplayName, speciesName } from '@core/data/index';
+import type { GenderRequirement } from '@core/solver/types';
 
 export function Panel({
   title,
@@ -56,6 +57,10 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={`${inputBase} ${props.className ?? ''}`} />;
 }
 
+export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={`${inputBase} ${props.className ?? ''}`} />;
+}
+
 export function Button({
   variant = 'default',
   className = '',
@@ -97,11 +102,111 @@ export function PassiveChip({ internalName }: { internalName: string }) {
   );
 }
 
+/**
+ * Plain-English odds for one breeding step.
+ *
+ * Kept in one place because the temptation is to collapse it into a single "% per hatch",
+ * which is wrong: a given pair of species always produces the same child, so the only
+ * per-egg uncertainty is which passives come along. The gender factor is the separate cost
+ * of getting the two parents to be opposite sexes, and belongs in its own sentence.
+ */
+export function stepOdds({
+  passiveSuccess,
+  genderFactor,
+  genderRequirement,
+  wanted,
+}: {
+  passiveSuccess: number;
+  genderFactor: number;
+  genderRequirement: GenderRequirement | null;
+  /** Passives riding on this step, already in display form. */
+  wanted: string[];
+}): { hatch: string; gender: string | null } {
+  const hatch =
+    wanted.length === 0
+      ? 'every hatch is the right species'
+      : `${(passiveSuccess * 100).toFixed(1)}% of hatches carry ${wanted.join(' + ')}`;
+
+  let gender: string | null = null;
+  if (genderRequirement?.kind === 'species-ratio') {
+    gender =
+      `the ${speciesName(genderRequirement.speciesIndex)} you breed must come out ` +
+      `${genderRequirement.gender} (${Math.round(genderRequirement.probability * 100)}% of its hatches)`;
+  } else if (genderRequirement?.kind === 'coin-flip') {
+    gender = 'both parents are bred, so they have to come out opposite sexes (about half the time)';
+  } else if (genderFactor < 1) {
+    gender = `parent genders cost a further ${Math.round(genderFactor * 100)}%`;
+  }
+
+  return { hatch, gender };
+}
+
 export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: string }) {
   return (
     <div className="rounded-md border border-edge/60 bg-surface-2 px-3 py-2">
       <div className="text-[11px] uppercase tracking-wide text-ink-2">{label}</div>
       <div className={`nums mt-0.5 text-lg font-semibold ${tone ?? 'text-ink-0'}`}>{value}</div>
+    </div>
+  );
+}
+
+/**
+ * A centred modal panel.
+ *
+ * Deliberately not portalled: there is no document during the server render the smoke tests
+ * use, and the app has no stacking context that a fixed overlay needs escaping from.
+ */
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
+      // mousedown rather than click, so a drag that ends on the backdrop does not close it.
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="my-auto h-fit w-full max-w-2xl rounded-lg border border-edge bg-surface-1 shadow-2xl shadow-black/50"
+      >
+        <header className="flex items-center justify-between gap-3 border-b border-edge/50 px-4 py-2.5">
+          <h2 className="text-sm font-semibold tracking-wide text-ink-0">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded px-2 py-0.5 text-ink-2 transition hover:bg-surface-2 hover:text-ink-0"
+          >
+            ×
+          </button>
+        </header>
+        <div className="p-4">{children}</div>
+        {footer && (
+          <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-edge/50 px-4 py-3">
+            {footer}
+          </footer>
+        )}
+      </div>
     </div>
   );
 }

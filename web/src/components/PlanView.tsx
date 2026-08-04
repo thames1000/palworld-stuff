@@ -4,7 +4,7 @@ import type { Pal } from '@core/save/types';
 import { maskedPassives, type PlanStep, type PlanStepRef } from '@core/solver/steps';
 import type { Feasibility, TargetSpec } from '@core/solver/types';
 import type { SolveSummary } from '../worker/protocol';
-import { PassiveChip, Panel, Stat } from './ui';
+import { PassiveChip, Panel, Stat, stepOdds } from './ui';
 
 const VERDICTS: Record<Feasibility, { title: string; tone: string; body: string }> = {
   'already-owned': {
@@ -75,8 +75,14 @@ function ParentSlot({ label, parent }: { label: string; parent: PlanStepRef }) {
   );
 }
 
-function StepCard({ step, required }: { step: PlanStep; required: string[] }) {
+export function StepCard({ step, required }: { step: PlanStep; required: string[] }) {
   const keep = maskedPassives(step.mask, required);
+  const odds = stepOdds({
+    passiveSuccess: step.passiveSuccess,
+    genderFactor: step.genderFactor,
+    genderRequirement: step.genderRequirement,
+    wanted: keep.map(passiveDisplayName),
+  });
   return (
     <li className="rounded-lg border border-edge/60 bg-surface-1">
       <div className="flex items-center justify-between border-b border-edge/50 px-3 py-2">
@@ -85,7 +91,7 @@ function StepCard({ step, required }: { step: PlanStep; required: string[] }) {
           {step.isFinal && <span className="ml-2 text-accent">final</span>}
         </span>
         <span className="nums text-[11px] text-ink-2">
-          ~{step.expectedEggs.toFixed(1)} eggs · {(step.successPerEgg * 100).toFixed(1)}% per hatch
+          ~{step.expectedEggs.toFixed(1)} eggs · {odds.hatch}
         </span>
       </div>
       <div className="grid gap-3 p-3 md:grid-cols-[1fr_auto_1fr]">
@@ -108,6 +114,7 @@ function StepCard({ step, required }: { step: PlanStep; required: string[] }) {
             </>
           )}
         </div>
+        {odds.gender && <p className="mt-1 text-[11px] text-ink-2">Note: {odds.gender}.</p>}
         {step.expectedUnwanted >= 0.5 && (
           <p className="mt-1 text-[11px] text-ink-2">
             Expect ~{step.expectedUnwanted.toFixed(1)} unwanted passive(s) to tag along.

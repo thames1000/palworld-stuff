@@ -16,12 +16,15 @@ export function PlanBuilder({
   onSolve,
   solving,
   candidateCount,
+  emptyHint,
 }: {
   spec: TargetSpec;
   onChange: (next: TargetSpec) => void;
   onSolve: () => void;
   solving: boolean;
   candidateCount: number;
+  /** Shown instead of the count when there is nothing to breed from. */
+  emptyHint?: string;
 }) {
   const set = <K extends keyof TargetSpec>(key: K, value: TargetSpec[K]) =>
     onChange({ ...spec, [key]: value });
@@ -153,7 +156,11 @@ export function PlanBuilder({
         </details>
 
         <div className="flex items-center justify-between gap-3 border-t border-edge/50 pt-3">
-          <span className="text-xs text-ink-2">{candidateCount.toLocaleString()} Pals in scope</span>
+          <span className="text-xs text-ink-2">
+            {candidateCount === 0 && emptyHint
+              ? emptyHint
+              : `${candidateCount.toLocaleString()} Pals in scope`}
+          </span>
           <Button variant="primary" onClick={onSolve} disabled={solving || candidateCount === 0}>
             {solving ? <Spinner label="Solving…" /> : 'Find breeding plan'}
           </Button>

@@ -9,7 +9,7 @@ import { parseSave } from '@core/save/extract';
 import { solve } from '@core/solver/search';
 import { flattenPlan } from '@core/solver/steps';
 import type { Pal, SaveData } from '@core/save/types';
-import type { Scope, WorkerRequest, WorkerResponse } from './protocol';
+import type { Scope, SolveSource, WorkerRequest, WorkerResponse } from './protocol';
 
 let loaded: SaveData | null = null;
 
@@ -23,6 +23,12 @@ function applyScope(save: SaveData, scope: Scope): Pal[] {
   if (scope.guildId) pals = pals.filter((p) => p.groupId === scope.guildId);
   if (!scope.includeParty) pals = pals.filter((p) => p.location.kind !== 'party');
   return pals;
+}
+
+function candidatesFor(source: SolveSource): Pal[] {
+  if (source.kind === 'roster') return source.pals;
+  if (!loaded) throw new Error('No save has been loaded yet.');
+  return applyScope(loaded, source.scope);
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -41,8 +47,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
 
     if (request.kind === 'solve') {
-      if (!loaded) throw new Error('No save has been loaded yet.');
-      const candidates = applyScope(loaded, request.scope);
+      const candidates = candidatesFor(request.source);
       const result = solve(candidates, request.spec);
       post({
         kind: 'solved',

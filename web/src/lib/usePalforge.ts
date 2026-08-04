@@ -2,12 +2,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SaveData } from '@core/save/types';
 import type { TargetSpec } from '@core/solver/types';
-import type { Scope, SolveSummary, WorkerRequest, WorkerResponse } from '../worker/protocol';
+import type { SolveSource, SolveSummary, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import type { PickedSave } from './pickSave';
 
 export type Phase = 'empty' | 'loading' | 'ready' | 'error';
 
+/**
+ * `save` reads a real save file; `manual` plans from a roster you type in yourself. The
+ * two share the worker, the solver and every result view -- the only difference is where
+ * the candidate Pals come from.
+ */
+export type Mode = 'save' | 'manual';
+
 export interface PalforgeState {
+  mode: Mode;
   phase: Phase;
   save: SaveData | null;
   savePath: string | null;
@@ -20,6 +28,7 @@ export interface PalforgeState {
 export function usePalforge() {
   const workerRef = useRef<Worker | null>(null);
   const [state, setState] = useState<PalforgeState>({
+    mode: 'save',
     phase: 'empty',
     save: null,
     savePath: null,
@@ -80,6 +89,8 @@ export function usePalforge() {
   const load = useCallback(async (picked: PickedSave) => {
     setState((prev) => ({
       ...prev,
+      // Opening a save leaves manual mode behind, whichever surface started the pick.
+      mode: 'save',
       phase: 'loading',
       error: null,
       summary: null,
@@ -104,14 +115,15 @@ export function usePalforge() {
     }
   }, []);
 
-  const solve = useCallback((spec: TargetSpec, scope: Scope) => {
+  const solve = useCallback((spec: TargetSpec, source: SolveSource) => {
     setState((prev) => ({ ...prev, solving: true, error: null }));
-    const request: WorkerRequest = { kind: 'solve', spec, scope };
+    const request: WorkerRequest = { kind: 'solve', spec, source };
     workerRef.current?.postMessage(request);
   }, []);
 
-  const reset = useCallback(() => {
+  const reset = useCallback((mode: Mode = 'save') => {
     setState({
+      mode,
       phase: 'empty',
       save: null,
       savePath: null,
@@ -122,9 +134,12 @@ export function usePalforge() {
     });
   }, []);
 
+  /** Drop the save-file flow entirely and plan from a hand-entered roster. */
+  const startManual = useCallback(() => reset('manual'), [reset]);
+
   const dismissError = useCallback(() => {
     setState((prev) => ({ ...prev, error: null }));
   }, []);
 
-  return { ...state, load, solve, reset, dismissError };
+  return { ...state, load, solve, reset, startManual, dismissError };
 }
