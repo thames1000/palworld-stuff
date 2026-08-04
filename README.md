@@ -90,6 +90,11 @@ Palworld patch shifts the dataset around. Display names are accepted on the way 
 hand-written list works, and anything unreadable is reported entry by entry instead of being
 silently dropped.
 
+**On someone else's server.** If you play on a server you do not administer, there is no
+save to read and nothing the server exposes remotely carries gender, passives or IVs. The
+roster above can be typed in, or [`mod/`](mod/) holds a small read-only client mod that
+writes your Palbox straight out as a roster file to import.
+
 Both are kept in the browser's local storage and nowhere else. A tree remembers the Pals
 filling its slots, so it survives editing your roster or opening a different save — slots
 whose Pal is still around are re-read from it, and slots whose Pal has gone are flagged
