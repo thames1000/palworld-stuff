@@ -26,6 +26,13 @@ npm run web:build    # static site in dist-web/
 or any static host. It is built with a relative base path, so it works from a subdirectory
 as well as a domain root.
 
+**Vercel.** `vercel.json` configures it: import the repo and deploy, no dashboard settings
+needed. The config exists because the defaults would be wrong — Vercel's Vite preset runs
+`npm run build`, which here is `tsc` for the CLI, and serves `dist/`. It is pointed at
+`npm run web:build` and `dist-web/` instead. There are no rewrites: the app is a single page
+with no router, and a catch-all would break the relative asset paths on any nested URL.
+Hashed files under `/assets/` get a one-year immutable cache.
+
 **Nothing is uploaded.** The save is read, parsed, and solved in the browser; there is no
 server and no network request carrying your data. That matters beyond principle: a Palworld
 save contains the Steam IDs and display names of everyone who has played on that world, so
