@@ -33,6 +33,12 @@ needed. The config exists because the defaults would be wrong — Vercel's Vite 
 with no router, and a catch-all would break the relative asset paths on any nested URL.
 Hashed files under `/assets/` get a one-year immutable cache.
 
+`engines.node` lists the majors this builds on rather than an open `>=20`. Vercel resolves
+that field to the newest *available* major it matches and lets it override the dashboard
+setting, so an open range quietly moves the build onto each new Node major as it lands.
+The list resolves to the same version an open range does today; it just stops moving on its
+own.
+
 **Nothing is uploaded.** The save is read, parsed, and solved in the browser; there is no
 server and no network request carrying your data. That matters beyond principle: a Palworld
 save contains the Steam IDs and display names of everyone who has played on that world, so

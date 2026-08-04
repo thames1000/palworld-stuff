@@ -24,4 +24,13 @@ export default defineConfig({
     // ooz-wasm uses top-level await to instantiate its embedded WASM module.
     target: 'es2022',
   },
+  // Two warnings from ooz-wasm are expected and are not suppressed, because silencing them
+  // means silencing the same warning if it ever comes from our own code:
+  //
+  //   new URL("./", import.meta.url) doesn't exist at build time
+  //   Module "module" has been externalized for browser compatibility
+  //
+  // Both come from the `ENVIRONMENT_IS_NODE` branch of its Emscripten wrapper, which is dead
+  // code in a browser. Nothing is fetched at runtime either way: its WASM is a base64
+  // `data:` URI, and the file-locating path it guards runs only when that is *not* the case.
 });
