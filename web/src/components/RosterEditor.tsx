@@ -5,7 +5,7 @@ import { emptyManualPal, type ManualPalSpec } from '@core/save/manual';
 import { defaultTargetSpecies, newId, type ManualPlanState } from '../lib/manualPlan';
 import { PalDialog } from './PalDialog';
 import { ExportButtons, ImportDialog } from './RosterTransfer';
-import { Button, PassiveChip, Panel } from './ui';
+import { Button, Modal, PassiveChip, Panel } from './ui';
 
 const GENDER_MARK: Record<string, string> = { Male: '♂', Female: '♀', Unknown: '?' };
 
@@ -69,10 +69,54 @@ function PalRow({
   );
 }
 
+/**
+ * Confirmation for emptying the whole roster.
+ *
+ * Exported so it can be rendered on its own in the smoke tests, the same way the import
+ * dialog is -- the alternative is driving a click, and these tests server-render.
+ */
+export function ClearAllDialog({
+  pals,
+  onConfirm,
+  onCancel,
+}: {
+  pals: readonly ManualPalSpec[];
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal
+      title={`Clear all ${pals.length} Pal${pals.length === 1 ? '' : 's'}?`}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel}>
+            Keep my list
+          </Button>
+          {/* Offered here rather than only in the panel header: wanting a copy is most
+              likely at the moment you are about to destroy the original. */}
+          <ExportButtons pals={pals} />
+          <Button variant="danger" onClick={onConfirm}>
+            Clear all {pals.length}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-ink-1">
+        This empties your list and cannot be undone. The list is kept in this browser only, so
+        unless you have exported it there is no other copy.
+      </p>
+    </Modal>
+  );
+}
+
 export function RosterEditor({ plan }: { plan: ManualPlanState }) {
   const { roster } = plan;
   const [editing, setEditing] = useState<{ mode: 'add' | 'edit'; pal: ManualPalSpec } | null>(null);
   const [importing, setImporting] = useState(false);
+  // Removing one row is a single click to undo; clearing throws away everything that was
+  // typed by hand, and there is no undo and no copy anywhere else. So this one asks first.
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   const startAdd = (speciesIndex = defaultTargetSpecies()) =>
     setEditing({ mode: 'add', pal: emptyManualPal(newId('pal'), speciesIndex) });
@@ -101,7 +145,7 @@ export function RosterEditor({ plan }: { plan: ManualPlanState }) {
             Import
           </Button>
           {roster.length > 0 && (
-            <Button variant="ghost" onClick={plan.clearRoster}>
+            <Button variant="ghost" onClick={() => setConfirmingClear(true)}>
               Clear all
             </Button>
           )}
@@ -149,6 +193,17 @@ export function RosterEditor({ plan }: { plan: ManualPlanState }) {
             {addButton('bottom')}
           </div>
         </>
+      )}
+
+      {confirmingClear && (
+        <ClearAllDialog
+          pals={roster}
+          onCancel={() => setConfirmingClear(false)}
+          onConfirm={() => {
+            plan.clearRoster();
+            setConfirmingClear(false);
+          }}
+        />
       )}
 
       {importing && (

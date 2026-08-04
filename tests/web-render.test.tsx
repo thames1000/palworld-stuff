@@ -15,7 +15,7 @@ import { PairPicker } from '../web/src/components/PairPicker';
 import { PalTable } from '../web/src/components/PalTable';
 import { PlanView } from '../web/src/components/PlanView';
 import { PalDialog } from '../web/src/components/PalDialog';
-import { RosterEditor } from '../web/src/components/RosterEditor';
+import { ClearAllDialog, RosterEditor } from '../web/src/components/RosterEditor';
 import { ImportDialog } from '../web/src/components/RosterTransfer';
 import { findPassive, findSpecies, speciesName } from '../src/core/data/index.js';
 import { parentPairsFor } from '../src/core/data/breeding.js';
@@ -230,6 +230,40 @@ describe('planning without a save', () => {
     ).replaceAll('<!-- -->', '');
     expect(html).toContain('Export');
     expect(html).toContain('Import');
+  });
+
+  it('does not clear the roster until it has been confirmed', () => {
+    let cleared = false;
+    const html = renderToString(
+      <RosterEditor
+        plan={manualPlanState({ roster: [manualSpec], clearRoster: () => (cleared = true) })}
+      />,
+    ).replaceAll('<!-- -->', '');
+    // Clear all is on offer, but the dialog behind it is not open and nothing has gone yet.
+    expect(html).toContain('Clear all');
+    expect(html).not.toContain('cannot be undone');
+    expect(cleared).toBe(false);
+  });
+
+  it('says what clearing costs, and offers a copy before taking it', () => {
+    const html = renderToString(
+      <ClearAllDialog pals={[manualSpec, manualSpec]} onConfirm={() => {}} onCancel={() => {}} />,
+    ).replaceAll('<!-- -->', '');
+    expect(html).toContain('role="dialog"');
+    // The count is the thing worth checking twice before agreeing to it.
+    expect(html).toContain('Clear all 2 Pals?');
+    expect(html).toContain('cannot be undone');
+    // Export sits in the dialog because this is the moment you would want it.
+    expect(html).toContain('Export');
+    // Backing out must be available and must not read as the destructive option.
+    expect(html).toContain('Keep my list');
+  });
+
+  it('counts a single Pal without the plural', () => {
+    const html = renderToString(
+      <ClearAllDialog pals={[manualSpec]} onConfirm={() => {}} onCancel={() => {}} />,
+    ).replaceAll('<!-- -->', '');
+    expect(html).toContain('Clear all 1 Pal?');
   });
 
   it('offers import even with an empty roster, so a list can be brought in first', () => {

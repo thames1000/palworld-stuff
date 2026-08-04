@@ -65,12 +65,17 @@ export function Button({
   variant = 'default',
   className = '',
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'ghost' }) {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'default' | 'primary' | 'ghost' | 'danger';
+}) {
   const styles = {
     primary:
       'bg-accent text-surface-0 font-semibold hover:brightness-110 disabled:bg-surface-3 disabled:text-ink-2',
     default: 'bg-surface-2 text-ink-0 border border-edge hover:bg-surface-3',
     ghost: 'text-ink-1 hover:text-ink-0 hover:bg-surface-2',
+    // For the button that actually destroys something. Never the quiet default in a dialog:
+    // it should read as the deliberate choice, not the one you hit to dismiss the box.
+    danger: 'border border-bad/40 bg-bad/12 text-bad font-medium hover:bg-bad/20',
   }[variant];
   return (
     <button
