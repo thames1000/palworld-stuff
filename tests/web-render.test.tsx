@@ -133,6 +133,31 @@ describe('web UI', () => {
     expect(html).toContain('1 of 1 Pals');
   });
 
+  it('color-codes Pal table passives by tier', () => {
+    const pal = {
+      ...samplePal,
+      passives: [
+        findPassive('Legend')!.internalName,
+        findPassive('Artisan')!.internalName,
+        findPassive('Serious')!.internalName,
+        findPassive('Clumsy')!.internalName,
+      ],
+    };
+    const html = renderToString(<PalTable pals={[pal]} onPickSpecies={() => {}} />).replaceAll(
+      '<!-- -->',
+      '',
+    );
+
+    expect(html).toContain('data-passive-tier="diamond"');
+    expect(html).toContain('data-passive-tier="yellow"');
+    expect(html).toContain('data-passive-tier="white"');
+    expect(html).toContain('data-passive-tier="red"');
+    expect(html).toContain('text-passive-diamond');
+    expect(html).toContain('text-passive-yellow');
+    expect(html).toContain('text-passive-white');
+    expect(html).toContain('text-passive-red');
+  });
+
   it('renders an empty plan panel without a summary', () => {
     const html = renderToString(<PlanView summary={null} spec={spec} />);
     expect(html).toContain('Find breeding plan');

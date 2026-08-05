@@ -21,6 +21,11 @@
   --color-good: oklch(0.76 0.15 155);
   --color-warn: oklch(0.8 0.14 85);
   --color-bad: oklch(0.68 0.17 25);
+
+  --color-passive-diamond: oklch(0.82 0.13 210);
+  --color-passive-yellow: oklch(0.84 0.16 88);
+  --color-passive-white: oklch(0.93 0.012 255);
+  --color-passive-red: oklch(0.68 0.18 25);
 }
 
 html,

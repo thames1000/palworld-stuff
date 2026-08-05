@@ -74,10 +74,21 @@ export function speciesName(index: number): string {
   return SPECIES[index]?.name ?? `Unknown(${index})`;
 }
 
+const PALMODS_ICON_BASE_URL = 'https://assets.palmods.gg/v1.0.0/pals/icons/';
+
+function palmodsIconSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\(([^)]*)\)/g, '$1')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 /** Public Pal portrait used only for optional diagram/icon rendering. */
 export function speciesIconUrl(index: number): string | null {
-  const internal = SPECIES[index]?.internalName;
-  return internal ? `https://palworld.atlasforge.gg/images/pal/T_${internal}_icon_normal.webp` : null;
+  const species = SPECIES[index];
+  if (!species) return null;
+  return `${PALMODS_ICON_BASE_URL}${palmodsIconSlug(species.name)}.webp`;
 }
 
 const passiveByInternal = new Map<string, Passive>();
@@ -94,6 +105,19 @@ export function findPassive(query: string): Passive | undefined {
 
 export function passiveDisplayName(internalName: string): string {
   return passiveByInternal.get(internalName.toLowerCase())?.name ?? internalName;
+}
+
+export type PassiveColorTier = 'diamond' | 'yellow' | 'white' | 'red';
+
+export function passiveColorTierForRank(rank: number): PassiveColorTier {
+  if (rank < 0) return 'red';
+  if (rank >= 4) return 'diamond';
+  if (rank >= 3) return 'yellow';
+  return 'white';
+}
+
+export function passiveColorTier(internalName: string): PassiveColorTier {
+  return passiveColorTierForRank(passiveByInternalName(internalName)?.rank ?? 0);
 }
 
 /** Full passive record for a save-file internal name, when the game documents it. */

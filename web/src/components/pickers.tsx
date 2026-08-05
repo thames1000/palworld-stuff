@@ -1,6 +1,12 @@
 /** Searchable pickers for the 288 species and 115 passive skills. */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PASSIVES, SPECIES, passiveDisplayName } from '@core/data/index';
+import {
+  PASSIVES,
+  SPECIES,
+  passiveColorTier,
+  passiveDisplayName,
+  type PassiveColorTier,
+} from '@core/data/index';
 import { PassiveChip, TextInput } from './ui';
 
 interface Option {
@@ -177,6 +183,13 @@ const PASSIVE_OPTIONS: Option[] = [...PASSIVES]
     rank: p.rank,
   }));
 
+const PASSIVE_BUTTON_TONE: Record<PassiveColorTier, string> = {
+  diamond: 'border-passive-diamond/55 bg-passive-diamond/12 text-passive-diamond',
+  yellow: 'border-passive-yellow/50 bg-passive-yellow/12 text-passive-yellow',
+  white: 'border-passive-white/35 bg-passive-white/8 text-passive-white',
+  red: 'border-passive-red/55 bg-passive-red/12 text-passive-red',
+};
+
 export function PassivePicker({
   selected,
   onChange,
@@ -204,7 +217,7 @@ export function PassivePicker({
               <button
                 type="button"
                 onClick={() => onChange(selected.filter((s) => s !== internalName))}
-                className="group inline-flex items-center gap-1 rounded border border-edge bg-surface-2 py-0.5 pl-1.5 pr-1 text-[11px] text-ink-0 transition hover:border-bad/50"
+                className={`group inline-flex items-center gap-1 rounded border py-0.5 pl-1.5 pr-1 text-[11px] transition hover:border-bad/50 ${PASSIVE_BUTTON_TONE[passiveColorTier(internalName)]}`}
                 aria-label={`Remove ${passiveDisplayName(internalName)}`}
               >
                 {passiveDisplayName(internalName)}

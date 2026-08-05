@@ -1,5 +1,11 @@
 /** Mermaid rendering for flattened breeding plans. */
-import { passiveDisplayName, speciesIconUrl, speciesName } from '../data/index.js';
+import {
+  passiveColorTier,
+  passiveDisplayName,
+  speciesIconUrl,
+  speciesName,
+  type PassiveColorTier,
+} from '../data/index.js';
 import type { Pal } from '../save/types.js';
 import { maskedPassives, type PlanStep, type PlanStepRef } from './steps.js';
 import type { TargetSpec } from './types.js';
@@ -9,10 +15,17 @@ export interface MermaidPlanOptions {
   direction?: 'TD' | 'LR';
 }
 
+export interface MermaidPlanPassive {
+  internalName: string;
+  label: string;
+  tier: PassiveColorTier;
+}
+
 export interface MermaidPlanIcon {
   nodeId: string;
   speciesIndex: number;
   url: string;
+  passives: MermaidPlanPassive[];
 }
 
 export interface MermaidPlanRender {
@@ -34,30 +47,26 @@ function label(lines: Array<string | null | undefined>): string {
   return escapeLabel(lines.filter((line): line is string => Boolean(line)).join(' - '));
 }
 
-function usefulPassives(pal: Pal, required: readonly string[]): string {
-  const requiredSet = new Set(required.map((p) => p.toLowerCase()));
-  return pal.passives
-    .filter((p) => requiredSet.has(p.toLowerCase()))
-    .map(passiveDisplayName)
-    .join(' + ');
+function passiveBadges(passives: readonly string[]): MermaidPlanPassive[] {
+  return passives.map((internalName) => ({
+    internalName,
+    label: passiveDisplayName(internalName),
+    tier: passiveColorTier(internalName),
+  }));
 }
 
-function ownedLabel(pal: Pal, required: readonly string[]): string {
+function ownedLabel(pal: Pal): string {
   const nick = pal.nickname ? ` "${pal.nickname}"` : '';
-  const carried = usefulPassives(pal, required);
   return label([
     `${speciesName(pal.speciesIndex)}${nick}`,
     pal.gender,
-    carried || null,
     pal.location.label === 'Entered by hand' ? pal.location.label : null,
   ]);
 }
 
-function stepLabel(step: PlanStep, spec: TargetSpec): string {
-  const keep = maskedPassives(step.mask, spec.requiredPassives).map(passiveDisplayName);
+function stepLabel(step: PlanStep): string {
   return label([
     `Step ${step.index}${step.isFinal ? ' final' : ''}: ${speciesName(step.speciesIndex)}`,
-    keep.length ? `keep ${keep.join(' + ')}` : 'no passive target',
     `~${step.expectedEggs.toFixed(1)} eggs`,
   ]);
 }
@@ -68,10 +77,11 @@ function appendPalNode(
   id: string,
   speciesIndex: number,
   nodeLabel: string,
+  passives: readonly string[],
   tone: 'owned' | 'bred' | 'final',
 ): void {
   const icon = speciesIconUrl(speciesIndex);
-  if (icon) icons.push({ nodeId: id, speciesIndex, url: icon });
+  if (icon) icons.push({ nodeId: id, speciesIndex, url: icon, passives: passiveBadges(passives) });
   lines.push(`  ${id}["${nodeLabel}"]`);
   lines.push(`  class ${id} ${tone};`);
 }
@@ -79,8 +89,8 @@ function appendPalNode(
 /**
  * Converts the same ordered steps rendered by the UI into Mermaid source.
  *
- * The diagram deliberately stays compact: it names exact owned Pals by species/nickname
- * and location, then keeps bred nodes focused on the child, wanted passives and egg cost.
+ * The diagram deliberately keeps labels compact: passives are carried as render metadata
+ * so the UI can draw color-coded badges without duplicating long text inside each node.
  */
 export function renderPlanMermaidModel(
   steps: readonly PlanStep[],
@@ -113,7 +123,8 @@ export function renderPlanMermaidModel(
       icons,
       id,
       ref.pal.speciesIndex,
-      ownedLabel(ref.pal, spec.requiredPassives),
+      ownedLabel(ref.pal),
+      ref.pal.passives,
       'owned',
     );
     return id;
@@ -130,7 +141,8 @@ export function renderPlanMermaidModel(
       icons,
       child,
       step.speciesIndex,
-      stepLabel(step, spec),
+      stepLabel(step),
+      maskedPassives(step.mask, spec.requiredPassives),
       tone,
     );
     lines.push(`  ${parentA} --> ${child}`);

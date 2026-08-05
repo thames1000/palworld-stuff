@@ -42,31 +42,32 @@ export interface PlanStep {
   isFinal: boolean;
 }
 
-/** Post-order walk, so every step's parents are produced before the step itself. */
-function collect(node: PlanNode, out: PlanNode[]): void {
-  if (!node.parents) return;
-  collect(node.parents[0], out);
-  collect(node.parents[1], out);
-  out.push(node);
+interface StepDraft {
+  node: PlanNode;
+  parents: [PlanStepRef, PlanStepRef];
+}
+
+/** Post-order walk, so every step occurrence's parents are produced before the step itself. */
+function collect(node: PlanNode, out: StepDraft[]): PlanStepRef {
+  if (node.source) return { kind: 'owned', pal: node.source };
+  const parents: [PlanStepRef, PlanStepRef] = [
+    collect(node.parents![0], out),
+    collect(node.parents![1], out),
+  ];
+  const step = out.length + 1;
+  out.push({ node, parents });
+  return { kind: 'step', step, speciesIndex: node.speciesIndex };
 }
 
 export function flattenPlan(plan: PlanNode): PlanStep[] {
-  const ordered: PlanNode[] = [];
+  const ordered: StepDraft[] = [];
   collect(plan, ordered);
 
-  const stepNumbers = new Map<PlanNode, number>();
-  ordered.forEach((node, i) => stepNumbers.set(node, i + 1));
-
-  const refFor = (node: PlanNode): PlanStepRef =>
-    node.source
-      ? { kind: 'owned', pal: node.source }
-      : { kind: 'step', step: stepNumbers.get(node)!, speciesIndex: node.speciesIndex };
-
-  return ordered.map((node, i) => ({
+  return ordered.map(({ node, parents }, i) => ({
     index: i + 1,
     speciesIndex: node.speciesIndex,
     mask: node.mask,
-    parents: [refFor(node.parents![0]), refFor(node.parents![1])],
+    parents,
     expectedEggs: node.stepEggs,
     passiveSuccess: node.passiveSuccess,
     genderFactor: node.genderFactor,

@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { findPassive, findSpecies, speciesName } from '../src/core/data/index.js';
+import {
+  findPassive,
+  findSpecies,
+  passiveColorTier,
+  speciesIconUrl,
+  speciesName,
+} from '../src/core/data/index.js';
 import { renderPlanMermaid, renderPlanMermaidModel } from '../src/core/solver/diagram.js';
 import { solve } from '../src/core/solver/search.js';
 import { flattenPlan, type PlanStep } from '../src/core/solver/steps.js';
 import { passiveInheritanceProbability, expectedUnwantedPassives } from '../src/core/solver/probability.js';
-import type { TargetSpec } from '../src/core/solver/types.js';
+import type { PlanNode, TargetSpec } from '../src/core/solver/types.js';
 import type { Gender, Pal } from '../src/core/save/types.js';
 
 let counter = 0;
@@ -54,6 +60,42 @@ function spec(overrides: Partial<TargetSpec> = {}): TargetSpec {
     beamSize: 1200,
     allowExcludedParents: false,
     ...overrides,
+  };
+}
+
+function ownedNode(pal: Pal): PlanNode {
+  return {
+    speciesIndex: pal.speciesIndex,
+    mask: 0,
+    generation: 0,
+    poolSize: pal.passives.length,
+    stepEggs: 0,
+    passiveSuccess: 1,
+    genderFactor: 1,
+    genderRequirement: null,
+    totalEggs: 0,
+    expectedUnwanted: 0,
+    source: pal,
+    parents: null,
+    requiredGender: null,
+  };
+}
+
+function bredNode(species: string, parents: [PlanNode, PlanNode]): PlanNode {
+  return {
+    speciesIndex: findSpecies(species),
+    mask: 0,
+    generation: Math.max(parents[0].generation, parents[1].generation) + 1,
+    poolSize: 0,
+    stepEggs: 1,
+    passiveSuccess: 1,
+    genderFactor: 1,
+    genderRequirement: null,
+    totalEggs: parents[0].totalEggs + parents[1].totalEggs + 1,
+    expectedUnwanted: 0,
+    source: null,
+    parents,
+    requiredGender: null,
   };
 }
 
@@ -121,9 +163,7 @@ describe('solver', () => {
 
     expect(diagram).toContain('flowchart TD');
     expect(diagram).toContain('classDef final');
-    expect(rendered.icons.some((icon) => icon.url.includes('T_LazyDragon_Electric_icon_normal.webp'))).toBe(
-      true,
-    );
+    expect(rendered.icons.some((icon) => icon.url.endsWith('/relaxaurus-lux.webp'))).toBe(true);
     expect(diagram).not.toContain('@{ img:');
     expect(diagram).toContain('class pal_0 owned;');
     expect(diagram).toContain('class step_1 final;');
@@ -131,8 +171,14 @@ describe('solver', () => {
     expect(diagram).toContain('&lt;Sparky &quot;One&quot;&gt;');
     expect(diagram).toContain('Jormuntide Ignis');
     expect(diagram).toContain('Step 1 final');
-    expect(diagram).toContain('keep Artisan + Serious');
+    expect(diagram).not.toContain('has Artisan');
+    expect(diagram).not.toContain('expected Artisan + Serious');
+    expect(diagram).not.toContain('no passive target');
     expect(diagram).toContain('-->');
+
+    const childIcon = rendered.icons.find((icon) => icon.nodeId === 'step_1');
+    expect(childIcon?.passives.map((passive) => passive.label)).toEqual(['Artisan', 'Serious']);
+    expect(childIcon?.passives.map((passive) => passive.tier)).toEqual(['yellow', 'white']);
   });
 
   it('does not reuse owned Pal nodes across diagram layers', () => {
@@ -175,7 +221,7 @@ describe('solver', () => {
     const rendered = renderPlanMermaidModel(steps, target);
     const diagram = rendered.source;
     const repeatedParentIcons = rendered.icons.filter((icon) =>
-      icon.url.includes('T_LazyDragon_Electric_icon_normal.webp'),
+      icon.url.endsWith('/relaxaurus-lux.webp'),
     );
 
     expect(repeatedParentIcons).toHaveLength(2);
@@ -183,6 +229,74 @@ describe('solver', () => {
     expect(diagram).toContain('pal_0 --> step_1');
     expect(diagram).toContain('pal_2 --> step_2');
     expect(diagram).not.toContain('pal_0 --> step_2');
+  });
+
+  it('keeps duplicate bred node occurrences wired to their local consumers', () => {
+    const sharedWumpoBotan = bredNode('Wumpo Botan', [
+      ownedNode(makePal('Wumpo', 'Male', [])),
+      ownedNode(makePal('Blazamut', 'Female', [])),
+    ]);
+    const firstDualith = bredNode('Dualith', [
+      ownedNode(makePal('Blazamut', 'Male', [])),
+      sharedWumpoBotan,
+    ]);
+    const secondDualith = bredNode('Dualith', [
+      ownedNode(makePal('Blazamut', 'Male', [])),
+      sharedWumpoBotan,
+    ]);
+    const root = bredNode('Flaracle', [firstDualith, secondDualith]);
+
+    const steps = flattenPlan(root);
+    const diagram = renderPlanMermaidModel(
+      steps,
+      spec({ speciesIndex: findSpecies('Flaracle'), requiredPassives: [] }),
+    ).source;
+
+    expect(steps.map((step) => `${step.index}:${speciesName(step.speciesIndex)}`)).toEqual([
+      '1:Wumpo Botan',
+      '2:Dualith',
+      '3:Wumpo Botan',
+      '4:Dualith',
+      '5:Flaracle',
+    ]);
+    expect(diagram).toContain('step_1 --> step_2');
+    expect(diagram).toContain('step_3 --> step_4');
+    expect(diagram).not.toContain('step_3 --> step_2');
+    expect(diagram).not.toContain('step_1 --> step_4');
+  });
+
+  it('uses PalMods icon urls for displayable Pals', () => {
+    expect(speciesIconUrl(findSpecies('Fuack Ignis'))).toBe(
+      'https://assets.palmods.gg/v1.0.0/pals/icons/fuack-ignis.webp',
+    );
+    expect(speciesIconUrl(findSpecies('Palumba'))).toBe(
+      'https://assets.palmods.gg/v1.0.0/pals/icons/palumba.webp',
+    );
+    expect(speciesIconUrl(findSpecies('Sootseer'))).toBe(
+      'https://assets.palmods.gg/v1.0.0/pals/icons/sootseer.webp',
+    );
+    expect(speciesIconUrl(findSpecies('Dualith'))).toBe(
+      'https://assets.palmods.gg/v1.0.0/pals/icons/dualith.webp',
+    );
+    expect(speciesIconUrl(findSpecies('Dualith Noct'))).toBe(
+      'https://assets.palmods.gg/v1.0.0/pals/icons/dualith-noct.webp',
+    );
+    expect(speciesIconUrl(findSpecies('Eidrolon'))).toBe(
+      'https://assets.palmods.gg/v1.0.0/pals/icons/eidrolon.webp',
+    );
+    expect(speciesIconUrl(findSpecies('Flaracle'))).toBe(
+      'https://assets.palmods.gg/v1.0.0/pals/icons/flaracle.webp',
+    );
+    expect(speciesIconUrl(findSpecies('Gumoss (Special)'))).toBe(
+      'https://assets.palmods.gg/v1.0.0/pals/icons/gumoss-special.webp',
+    );
+  });
+
+  it('maps passive ranks to the displayed color tiers', () => {
+    expect(passiveColorTier(findPassive('Legend')!.internalName)).toBe('diamond');
+    expect(passiveColorTier(findPassive('Artisan')!.internalName)).toBe('yellow');
+    expect(passiveColorTier(findPassive('Serious')!.internalName)).toBe('white');
+    expect(passiveColorTier(findPassive('Clumsy')!.internalName)).toBe('red');
   });
 
   it('refuses to pair two owned Pals of the same gender', () => {

@@ -1,6 +1,12 @@
 /** Small shared primitives so the panels stay visually consistent. */
 import { useEffect, type ReactNode } from 'react';
-import { passiveByInternalName, passiveDisplayName, speciesName } from '@core/data/index';
+import {
+  passiveByInternalName,
+  passiveColorTier,
+  passiveDisplayName,
+  speciesName,
+  type PassiveColorTier,
+} from '@core/data/index';
 import type { GenderRequirement } from '@core/solver/types';
 
 export function Panel({
@@ -86,22 +92,27 @@ export function Button({
 }
 
 /**
- * A passive skill chip, tinted by the skill's rank so the negatives you are trying to
- * breed out are visible at a glance rather than needing to be read.
+ * A passive skill chip, tinted by the same diamond/yellow/white/red tiers the game uses.
  */
 export function PassiveChip({ internalName }: { internalName: string }) {
   const passive = passiveByInternalName(internalName);
-  const rank = passive?.rank ?? 0;
-  const tone =
-    rank >= 3
-      ? 'border-good/40 bg-good/12 text-good'
-      : rank > 0
-        ? 'border-edge bg-surface-3 text-ink-0'
-        : rank < 0
-          ? 'border-bad/40 bg-bad/12 text-bad'
-          : 'border-edge bg-surface-2 text-ink-1';
+  const tier = passiveColorTier(internalName);
+  const tone: Record<PassiveColorTier, string> = {
+    diamond:
+      'border-passive-diamond/60 bg-passive-diamond/15 text-passive-diamond shadow-[0_0_12px_rgba(125,211,252,0.12)]',
+    yellow: 'border-passive-yellow/55 bg-passive-yellow/14 text-passive-yellow',
+    white: 'border-passive-white/35 bg-passive-white/8 text-passive-white',
+    red: 'border-passive-red/55 bg-passive-red/14 text-passive-red',
+  };
+  const title = passive?.description
+    ? `${passive.name} (${tier} passive, rank ${passive.rank})\n${passive.description}`
+    : `${passiveDisplayName(internalName)} (${tier} passive)`;
   return (
-    <span className={`inline-block rounded border px-1.5 py-0.5 text-[11px] leading-tight ${tone}`}>
+    <span
+      className={`inline-block rounded border px-1.5 py-0.5 text-[11px] leading-tight ${tone[tier]}`}
+      data-passive-tier={tier}
+      title={title}
+    >
       {passiveDisplayName(internalName)}
     </span>
   );
