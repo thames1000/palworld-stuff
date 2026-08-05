@@ -10,6 +10,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 const ICON_SIZE = 28;
 const ICON_SPACE = 42;
+const VIEWBOX_PAD = 28;
 
 function hashSource(source: string): string {
   let hash = 0;
@@ -46,7 +47,19 @@ function findNodeGroup(doc: XMLDocument, nodeId: string): SVGGElement | null {
   return groups.find((group) => group.id === nodeId || group.id.startsWith(expectedPrefix)) ?? null;
 }
 
-function addPalIcons(svg: string, icons: readonly MermaidPlanIcon[]): string {
+function expandViewBox(doc: XMLDocument): void {
+  const svg = doc.documentElement;
+  const viewBox = svg.getAttribute('viewBox')?.split(/\s+/).map(Number);
+  if (viewBox?.length === 4 && viewBox.every(Number.isFinite)) {
+    const [x, y, width, height] = viewBox as [number, number, number, number];
+    svg.setAttribute('viewBox', `${x - VIEWBOX_PAD} ${y} ${width + VIEWBOX_PAD * 2} ${height}`);
+  }
+
+  const width = parseSvgNumber(svg.getAttribute('width'));
+  if (width !== null) svg.setAttribute('width', String(width + VIEWBOX_PAD * 2));
+}
+
+export function addPalIconsToSvg(svg: string, icons: readonly MermaidPlanIcon[]): string {
   if (icons.length === 0) return svg;
 
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
@@ -79,17 +92,24 @@ function addPalIcons(svg: string, icons: readonly MermaidPlanIcon[]): string {
     image.setAttribute('height', String(ICON_SIZE));
     image.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     image.setAttribute('crossorigin', 'anonymous');
+    image.setAttribute('style', 'pointer-events: none;');
+
+    const title = doc.createElementNS(SVG_NS, 'title');
+    title.textContent = speciesName(icon.speciesIndex);
+    image.appendChild(title);
 
     const label = group.querySelector<SVGGElement>('g.label');
     if (label) label.setAttribute('transform', appendTranslate(label.getAttribute('transform'), 12, 0));
-    if (label?.parentNode === group) {
-      group.insertBefore(image, label);
+
+    if (rect.parentNode) {
+      rect.parentNode.insertBefore(image, rect.nextSibling);
     } else {
       group.appendChild(image);
     }
     changed = true;
   }
 
+  if (changed) expandViewBox(doc);
   return changed ? new XMLSerializer().serializeToString(doc.documentElement) : svg;
 }
 
@@ -131,7 +151,7 @@ export function PlanDiagram({ steps, spec }: { steps: readonly PlanStep[]; spec:
         });
 
         const rendered = await mermaid.render(diagramId, source);
-        if (!cancelled) setSvg(addPalIcons(rendered.svg, diagram.icons));
+        if (!cancelled) setSvg(addPalIconsToSvg(rendered.svg, diagram.icons));
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
