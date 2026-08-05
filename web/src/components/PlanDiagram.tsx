@@ -44,7 +44,7 @@ function appendTranslate(transform: string | null, x: number, y: number): string
 function findNodeGroup(doc: XMLDocument, nodeId: string): SVGGElement | null {
   const expectedPrefix = `flowchart-${nodeId}-`;
   const groups = Array.from(doc.querySelectorAll<SVGGElement>('g[id]'));
-  return groups.find((group) => group.id === nodeId || group.id.startsWith(expectedPrefix)) ?? null;
+  return groups.find((group) => group.id === nodeId || group.id.includes(expectedPrefix)) ?? null;
 }
 
 function expandViewBox(doc: XMLDocument): void {
