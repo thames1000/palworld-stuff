@@ -3,15 +3,16 @@
  *
  * The tree's leaves hold whole Pal records and are shared between branches, which is right
  * for searching but wrong for display. Flattening produces a numbered sequence where each
- * parent is either a Pal you own or a reference back to an earlier step -- the form both
- * the CLI and the web UI actually render.
+ * parent is either a Pal you own, a direct reference back to an earlier step, or a compact
+ * "bred earlier" reference when a later branch would otherwise repeat the same subtree.
  */
 import type { Pal } from '../save/types.js';
 import type { GenderRequirement, PlanNode } from './types.js';
 
 export type PlanStepRef =
   | { kind: 'owned'; pal: Pal }
-  | { kind: 'step'; step: number; speciesIndex: number };
+  | { kind: 'step'; step: number; speciesIndex: number; mask: number }
+  | { kind: 'bred'; step: number; speciesIndex: number; mask: number };
 
 export interface PlanStep {
   /** 1-based position in the order the steps should be performed. */
@@ -47,21 +48,32 @@ interface StepDraft {
   parents: [PlanStepRef, PlanStepRef];
 }
 
+function reuseKey(node: PlanNode): string {
+  return [node.speciesIndex, node.mask, node.poolSize, node.requiredGender ?? 'any'].join(':');
+}
+
 /** Post-order walk, so every step occurrence's parents are produced before the step itself. */
-function collect(node: PlanNode, out: StepDraft[]): PlanStepRef {
+function collect(node: PlanNode, out: StepDraft[], firstStepByState: Map<string, number>): PlanStepRef {
   if (node.source) return { kind: 'owned', pal: node.source };
+  const key = reuseKey(node);
+  const existingStep = firstStepByState.get(key);
+  if (existingStep !== undefined) {
+    return { kind: 'bred', step: existingStep, speciesIndex: node.speciesIndex, mask: node.mask };
+  }
+
   const parents: [PlanStepRef, PlanStepRef] = [
-    collect(node.parents![0], out),
-    collect(node.parents![1], out),
+    collect(node.parents![0], out, firstStepByState),
+    collect(node.parents![1], out, firstStepByState),
   ];
   const step = out.length + 1;
   out.push({ node, parents });
-  return { kind: 'step', step, speciesIndex: node.speciesIndex };
+  firstStepByState.set(key, step);
+  return { kind: 'step', step, speciesIndex: node.speciesIndex, mask: node.mask };
 }
 
 export function flattenPlan(plan: PlanNode): PlanStep[] {
   const ordered: StepDraft[] = [];
-  collect(plan, ordered);
+  collect(plan, ordered, new Map());
 
   return ordered.map(({ node, parents }, i) => ({
     index: i + 1,

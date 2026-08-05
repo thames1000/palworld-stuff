@@ -71,6 +71,10 @@ function stepLabel(step: PlanStep): string {
   ]);
 }
 
+function bredRefLabel(ref: Extract<PlanStepRef, { kind: 'bred' }>): string {
+  return label([speciesName(ref.speciesIndex), `Created in step ${ref.step}`]);
+}
+
 function appendPalNode(
   lines: string[],
   icons: MermaidPlanIcon[],
@@ -113,9 +117,23 @@ export function renderPlanMermaidModel(
   }
 
   let ownedCount = 0;
+  let bredRefCount = 0;
 
   const idFor = (ref: PlanStepRef): string => {
     if (ref.kind === 'step') return `step_${ref.step}`;
+    if (ref.kind === 'bred') {
+      const id = `made_${bredRefCount++}`;
+      appendPalNode(
+        lines,
+        icons,
+        id,
+        ref.speciesIndex,
+        bredRefLabel(ref),
+        maskedPassives(ref.mask, spec.requiredPassives),
+        'bred',
+      );
+      return id;
+    }
 
     const id = `pal_${ownedCount++}`;
     appendPalNode(

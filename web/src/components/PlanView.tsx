@@ -61,6 +61,7 @@ function PalCard({ pal }: { pal: Pal }) {
 }
 
 function ParentSlot({ label, parent }: { label: string; parent: PlanStepRef }) {
+  const bredLabel = parent.kind === 'bred' ? 'created in' : 'the result of';
   return (
     <div>
       <div className="mb-1 text-[10px] uppercase tracking-wide text-ink-2">{label}</div>
@@ -69,7 +70,9 @@ function ParentSlot({ label, parent }: { label: string; parent: PlanStepRef }) {
       ) : (
         <div className="rounded-md border border-dashed border-accent-dim/60 bg-surface-2/50 px-3 py-2">
           <div className="text-sm font-medium text-ink-0">{speciesName(parent.speciesIndex)}</div>
-          <div className="mt-1 text-[11px] text-ink-1">the result of step {parent.step}</div>
+          <div className="mt-1 text-[11px] text-ink-1">
+            {bredLabel} step {parent.step}
+          </div>
         </div>
       )}
     </div>

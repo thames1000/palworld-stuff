@@ -81,7 +81,11 @@ function ownedNode(pal: Pal): PlanNode {
   };
 }
 
-function bredNode(species: string, parents: [PlanNode, PlanNode]): PlanNode {
+function bredNode(
+  species: string,
+  parents: [PlanNode, PlanNode],
+  overrides: Partial<PlanNode> = {},
+): PlanNode {
   return {
     speciesIndex: findSpecies(species),
     mask: 0,
@@ -96,6 +100,7 @@ function bredNode(species: string, parents: [PlanNode, PlanNode]): PlanNode {
     source: null,
     parents,
     requiredGender: null,
+    ...overrides,
   };
 }
 
@@ -207,7 +212,7 @@ describe('solver', () => {
         mask: 3,
         parents: [
           { kind: 'owned', pal: repeatedParent },
-          { kind: 'step', step: 1, speciesIndex: findSpecies('Palumba') },
+          { kind: 'step', step: 1, speciesIndex: findSpecies('Palumba'), mask: 1 },
         ],
         expectedEggs: 2,
         passiveSuccess: 1,
@@ -231,38 +236,76 @@ describe('solver', () => {
     expect(diagram).not.toContain('pal_0 --> step_2');
   });
 
-  it('keeps duplicate bred node occurrences wired to their local consumers', () => {
-    const sharedWumpoBotan = bredNode('Wumpo Botan', [
-      ownedNode(makePal('Wumpo', 'Male', [])),
-      ownedNode(makePal('Blazamut', 'Female', [])),
+  it('collapses repeated bred subtrees into a made-earlier Pal reference', () => {
+    const firstSootseer = bredNode('Sootseer', [
+      ownedNode(makePal('Mammorest', 'Male', [])),
+      ownedNode(makePal('Wumpo Botan', 'Female', [])),
     ]);
     const firstDualith = bredNode('Dualith', [
-      ownedNode(makePal('Blazamut', 'Male', [])),
-      sharedWumpoBotan,
+      ownedNode(makePal('Wumpo Botan', 'Male', [])),
+      ownedNode(makePal('Blazamut', 'Female', [])),
+    ]);
+    const firstDualithNoct = bredNode('Dualith Noct', [firstSootseer, firstDualith]);
+    const secondSootseer = bredNode('Sootseer', [
+      ownedNode(makePal('Mammorest', 'Male', [])),
+      ownedNode(makePal('Wumpo Botan', 'Female', [])),
     ]);
     const secondDualith = bredNode('Dualith', [
-      ownedNode(makePal('Blazamut', 'Male', [])),
-      sharedWumpoBotan,
+      ownedNode(makePal('Wumpo Botan', 'Male', [])),
+      ownedNode(makePal('Blazamut', 'Female', [])),
     ]);
-    const root = bredNode('Flaracle', [firstDualith, secondDualith]);
+    const secondDualithNoct = bredNode('Dualith Noct', [secondSootseer, secondDualith]);
+    const eidrolon = bredNode('Eidrolon', [
+      ownedNode(makePal('Blazamut', 'Male', [])),
+      secondDualithNoct,
+    ]);
+    const root = bredNode('Solenne', [firstDualithNoct, eidrolon]);
 
     const steps = flattenPlan(root);
     const diagram = renderPlanMermaidModel(
       steps,
-      spec({ speciesIndex: findSpecies('Flaracle'), requiredPassives: [] }),
+      spec({ speciesIndex: findSpecies('Solenne'), requiredPassives: [] }),
     ).source;
 
     expect(steps.map((step) => `${step.index}:${speciesName(step.speciesIndex)}`)).toEqual([
-      '1:Wumpo Botan',
+      '1:Sootseer',
       '2:Dualith',
-      '3:Wumpo Botan',
-      '4:Dualith',
-      '5:Flaracle',
+      '3:Dualith Noct',
+      '4:Eidrolon',
+      '5:Solenne',
     ]);
-    expect(diagram).toContain('step_1 --> step_2');
-    expect(diagram).toContain('step_3 --> step_4');
-    expect(diagram).not.toContain('step_3 --> step_2');
-    expect(diagram).not.toContain('step_1 --> step_4');
+    expect(steps[3]!.parents[1]).toEqual({
+      kind: 'bred',
+      step: 3,
+      speciesIndex: findSpecies('Dualith Noct'),
+      mask: 0,
+    });
+    expect(diagram).toContain('made_0["Dualith Noct - Created in step 3"]');
+    expect(diagram).toContain('made_0 --> step_4');
+    expect(diagram).toContain('step_3 --> step_5');
+    expect(diagram).not.toContain('Step 6');
+  });
+
+  it('does not collapse bred nodes with different passive targets', () => {
+    const firstWumpoBotan = bredNode('Wumpo Botan', [
+      ownedNode(makePal('Wumpo', 'Male', [])),
+      ownedNode(makePal('Blazamut', 'Female', [])),
+    ]);
+    const secondWumpoBotan = bredNode(
+      'Wumpo Botan',
+      [ownedNode(makePal('Wumpo', 'Male', [])), ownedNode(makePal('Blazamut', 'Female', []))],
+      { mask: 1 },
+    );
+    const root = bredNode('Flaracle', [firstWumpoBotan, secondWumpoBotan]);
+
+    const steps = flattenPlan(root);
+
+    expect(steps.map((step) => `${step.index}:${speciesName(step.speciesIndex)}`)).toEqual([
+      '1:Wumpo Botan',
+      '2:Wumpo Botan',
+      '3:Flaracle',
+    ]);
+    expect(steps[2]!.parents.map((parent) => parent.kind)).toEqual(['step', 'step']);
   });
 
   it('uses PalMods icon urls for displayable Pals', () => {
