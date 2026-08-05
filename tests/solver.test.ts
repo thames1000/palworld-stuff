@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findPassive, findSpecies, speciesName } from '../src/core/data/index.js';
-import { renderPlanMermaid } from '../src/core/solver/diagram.js';
+import { renderPlanMermaid, renderPlanMermaidModel } from '../src/core/solver/diagram.js';
 import { solve } from '../src/core/solver/search.js';
 import { flattenPlan, type PlanStep } from '../src/core/solver/steps.js';
 import { passiveInheritanceProbability, expectedUnwantedPassives } from '../src/core/solver/probability.js';
@@ -116,15 +116,19 @@ describe('solver', () => {
     pals[0]!.nickname = '<Sparky "One">';
 
     const result = solve(pals, target);
-    const diagram = renderPlanMermaid(flattenPlan(result.plan!), target);
+    const rendered = renderPlanMermaidModel(flattenPlan(result.plan!), target);
+    const diagram = rendered.source;
 
     expect(diagram).toContain('flowchart TD');
     expect(diagram).toContain('classDef final');
-    expect(diagram).toContain('T_LazyDragon_Electric_icon_normal.webp');
+    expect(rendered.icons.some((icon) => icon.url.includes('T_LazyDragon_Electric_icon_normal.webp'))).toBe(
+      true,
+    );
+    expect(diagram).not.toContain('@{ img:');
     expect(diagram).toContain('class pal_0 owned;');
     expect(diagram).toContain('class step_1 final;');
     expect(diagram).toContain('Relaxaurus Lux');
-    expect(diagram).toContain('<Sparky \\"One\\">');
+    expect(diagram).toContain('&lt;Sparky &quot;One&quot;&gt;');
     expect(diagram).toContain('Jormuntide Ignis');
     expect(diagram).toContain('Step 1 final');
     expect(diagram).toContain('keep Artisan + Serious');
@@ -168,12 +172,14 @@ describe('solver', () => {
       },
     ];
 
-    const diagram = renderPlanMermaid(steps, target);
-    const repeatedParentNodes = diagram
-      .split('\n')
-      .filter((line) => line.includes('T_LazyDragon_Electric_icon_normal.webp'));
+    const rendered = renderPlanMermaidModel(steps, target);
+    const diagram = rendered.source;
+    const repeatedParentIcons = rendered.icons.filter((icon) =>
+      icon.url.includes('T_LazyDragon_Electric_icon_normal.webp'),
+    );
 
-    expect(repeatedParentNodes).toHaveLength(2);
+    expect(repeatedParentIcons).toHaveLength(2);
+    expect(diagram).not.toContain('@{ img:');
     expect(diagram).toContain('pal_0 --> step_1');
     expect(diagram).toContain('pal_2 --> step_2');
     expect(diagram).not.toContain('pal_0 --> step_2');

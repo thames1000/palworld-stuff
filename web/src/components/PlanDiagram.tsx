@@ -1,10 +1,15 @@
 /** Render and export a Mermaid diagram for a solved breeding plan. */
 import { useEffect, useId, useMemo, useState } from 'react';
 import { speciesName } from '@core/data/index';
-import { renderPlanMermaid } from '@core/solver/diagram';
+import { renderPlanMermaidModel, type MermaidPlanIcon } from '@core/solver/diagram';
 import type { PlanStep } from '@core/solver/steps';
 import type { TargetSpec } from '@core/solver/types';
 import { Button, Panel, Spinner } from './ui';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const XLINK_NS = 'http://www.w3.org/1999/xlink';
+const ICON_SIZE = 28;
+const ICON_SPACE = 42;
 
 function hashSource(source: string): string {
   let hash = 0;
@@ -24,9 +29,74 @@ function saveSvg(svg: string, speciesIndex: number): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function parseSvgNumber(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number(value.replace('px', ''));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function appendTranslate(transform: string | null, x: number, y: number): string {
+  const added = `translate(${x}, ${y})`;
+  return transform ? `${transform} ${added}` : added;
+}
+
+function findNodeGroup(doc: XMLDocument, nodeId: string): SVGGElement | null {
+  const expectedPrefix = `flowchart-${nodeId}-`;
+  const groups = Array.from(doc.querySelectorAll<SVGGElement>('g[id]'));
+  return groups.find((group) => group.id === nodeId || group.id.startsWith(expectedPrefix)) ?? null;
+}
+
+function addPalIcons(svg: string, icons: readonly MermaidPlanIcon[]): string {
+  if (icons.length === 0) return svg;
+
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  if (doc.querySelector('parsererror')) return svg;
+
+  let changed = false;
+  for (const icon of icons) {
+    const group = findNodeGroup(doc, icon.nodeId);
+    const rect = group?.querySelector<SVGRectElement>('rect.basic.label-container, rect.label-container, rect');
+    if (!group || !rect) continue;
+
+    const x = parseSvgNumber(rect.getAttribute('x'));
+    const y = parseSvgNumber(rect.getAttribute('y'));
+    const width = parseSvgNumber(rect.getAttribute('width'));
+    const height = parseSvgNumber(rect.getAttribute('height'));
+    if (x === null || y === null || width === null || height === null) continue;
+
+    rect.setAttribute('x', String(x - ICON_SPACE / 2));
+    rect.setAttribute('width', String(width + ICON_SPACE));
+
+    const image = doc.createElementNS(SVG_NS, 'image');
+    const iconX = x - ICON_SPACE / 2 + 7;
+    const iconY = y + (height - ICON_SIZE) / 2;
+    image.setAttribute('class', 'palforge-diagram-icon');
+    image.setAttribute('href', icon.url);
+    image.setAttributeNS(XLINK_NS, 'xlink:href', icon.url);
+    image.setAttribute('x', String(iconX));
+    image.setAttribute('y', String(iconY));
+    image.setAttribute('width', String(ICON_SIZE));
+    image.setAttribute('height', String(ICON_SIZE));
+    image.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    image.setAttribute('crossorigin', 'anonymous');
+
+    const label = group.querySelector<SVGGElement>('g.label');
+    if (label) label.setAttribute('transform', appendTranslate(label.getAttribute('transform'), 12, 0));
+    if (label?.parentNode === group) {
+      group.insertBefore(image, label);
+    } else {
+      group.appendChild(image);
+    }
+    changed = true;
+  }
+
+  return changed ? new XMLSerializer().serializeToString(doc.documentElement) : svg;
+}
+
 export function PlanDiagram({ steps, spec }: { steps: readonly PlanStep[]; spec: TargetSpec }) {
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
-  const source = useMemo(() => renderPlanMermaid(steps, spec), [steps, spec]);
+  const diagram = useMemo(() => renderPlanMermaidModel(steps, spec), [steps, spec]);
+  const source = diagram.source;
   const diagramId = `palforge-diagram-${reactId}-${hashSource(source)}`;
   const [svg, setSvg] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +131,7 @@ export function PlanDiagram({ steps, spec }: { steps: readonly PlanStep[]; spec:
         });
 
         const rendered = await mermaid.render(diagramId, source);
-        if (!cancelled) setSvg(rendered.svg);
+        if (!cancelled) setSvg(addPalIcons(rendered.svg, diagram.icons));
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -70,7 +140,7 @@ export function PlanDiagram({ steps, spec }: { steps: readonly PlanStep[]; spec:
     return () => {
       cancelled = true;
     };
-  }, [diagramId, source]);
+  }, [diagram.icons, diagramId, source]);
 
   const copy = async (text: string, kind: 'source' | 'svg') => {
     try {
