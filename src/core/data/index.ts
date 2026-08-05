@@ -74,6 +74,12 @@ export function speciesName(index: number): string {
   return SPECIES[index]?.name ?? `Unknown(${index})`;
 }
 
+/** Public Pal portrait used only for optional diagram/icon rendering. */
+export function speciesIconUrl(index: number): string | null {
+  const internal = SPECIES[index]?.internalName;
+  return internal ? `https://palworld.atlasforge.gg/images/pal/T_${internal}_icon_normal.webp` : null;
+}
+
 const passiveByInternal = new Map<string, Passive>();
 const passiveByLowerName = new Map<string, Passive>();
 for (const p of PASSIVES) {

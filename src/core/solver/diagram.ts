@@ -1,5 +1,5 @@
 /** Mermaid rendering for flattened breeding plans. */
-import { passiveDisplayName, speciesName } from '../data/index.js';
+import { passiveDisplayName, speciesIconUrl, speciesName } from '../data/index.js';
 import type { Pal } from '../save/types.js';
 import { maskedPassives, type PlanStep, type PlanStepRef } from './steps.js';
 import type { TargetSpec } from './types.js';
@@ -15,6 +15,10 @@ function escapeLabel(value: string): string {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+function escapeMermaidString(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n');
 }
 
 function label(lines: Array<string | null | undefined>): string {
@@ -39,6 +43,19 @@ function ownedLabel(pal: Pal, required: readonly string[]): string {
   ]);
 }
 
+function ownedIconLabel(pal: Pal, required: readonly string[]): string {
+  const nick = pal.nickname ? ` "${pal.nickname}"` : '';
+  const carried = usefulPassives(pal, required);
+  return [
+    `${speciesName(pal.speciesIndex)}${nick}`,
+    pal.gender,
+    carried || null,
+    pal.location.label === 'Entered by hand' ? pal.location.label : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join(' - ');
+}
+
 function stepLabel(step: PlanStep, spec: TargetSpec): string {
   const keep = maskedPassives(step.mask, spec.requiredPassives).map(passiveDisplayName);
   return label([
@@ -47,6 +64,38 @@ function stepLabel(step: PlanStep, spec: TargetSpec): string {
     keep.length ? `keep ${keep.join(' + ')}` : 'no passive target',
     `~${step.expectedEggs.toFixed(1)} eggs`,
   ]);
+}
+
+function stepIconLabel(step: PlanStep, spec: TargetSpec): string {
+  const keep = maskedPassives(step.mask, spec.requiredPassives).map(passiveDisplayName);
+  return [
+    `Step ${step.index}${step.isFinal ? ' final' : ''}: ${speciesName(step.speciesIndex)}`,
+    keep.length ? `keep ${keep.join(' + ')}` : 'no passive target',
+    `~${step.expectedEggs.toFixed(1)} eggs`,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join(' - ');
+}
+
+function appendPalNode(
+  lines: string[],
+  id: string,
+  speciesIndex: number,
+  diagramLabel: string,
+  fallbackLabel: string,
+  tone: 'owned' | 'bred' | 'final',
+): void {
+  const icon = speciesIconUrl(speciesIndex);
+  if (icon) {
+    lines.push(
+      `  ${id}@{ img: "${escapeMermaidString(icon)}", label: "${escapeMermaidString(
+        diagramLabel,
+      )}", pos: "t", w: 56, h: 56, constraint: "on" }`,
+    );
+  } else {
+    lines.push(`  ${id}["${fallbackLabel}"]`);
+  }
+  lines.push(`  class ${id} ${tone};`);
 }
 
 /**
@@ -69,23 +118,25 @@ export function renderPlanMermaid(
   ];
 
   if (steps.length === 0) {
-    lines.push(`  empty["${label(['No breeding steps'])}"]:::owned`);
+    lines.push(`  empty["${label(['No breeding steps'])}"]`);
+    lines.push('  class empty owned;');
     return lines.join('\n');
   }
 
-  const ownedIds = new Map<string, string>();
   let ownedCount = 0;
 
   const idFor = (ref: PlanStepRef): string => {
     if (ref.kind === 'step') return `step_${ref.step}`;
 
-    const key = ref.pal.instanceId || `${ref.pal.speciesIndex}-${ownedCount}`;
-    const existing = ownedIds.get(key);
-    if (existing) return existing;
-
     const id = `pal_${ownedCount++}`;
-    ownedIds.set(key, id);
-    lines.push(`  ${id}["${ownedLabel(ref.pal, spec.requiredPassives)}"]:::owned`);
+    appendPalNode(
+      lines,
+      id,
+      ref.pal.speciesIndex,
+      ownedIconLabel(ref.pal, spec.requiredPassives),
+      ownedLabel(ref.pal, spec.requiredPassives),
+      'owned',
+    );
     return id;
   };
 
@@ -95,7 +146,14 @@ export function renderPlanMermaid(
     const child = `step_${step.index}`;
     const tone = step.isFinal ? 'final' : 'bred';
 
-    lines.push(`  ${child}["${stepLabel(step, spec)}"]:::${tone}`);
+    appendPalNode(
+      lines,
+      child,
+      step.speciesIndex,
+      stepIconLabel(step, spec),
+      stepLabel(step, spec),
+      tone,
+    );
     lines.push(`  ${parentA} --> ${child}`);
     lines.push(`  ${parentB} --> ${child}`);
   }

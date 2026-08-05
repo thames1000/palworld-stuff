@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { findPassive, findSpecies, speciesName } from '../src/core/data/index.js';
 import { renderPlanMermaid } from '../src/core/solver/diagram.js';
 import { solve } from '../src/core/solver/search.js';
-import { flattenPlan } from '../src/core/solver/steps.js';
+import { flattenPlan, type PlanStep } from '../src/core/solver/steps.js';
 import { passiveInheritanceProbability, expectedUnwantedPassives } from '../src/core/solver/probability.js';
 import type { TargetSpec } from '../src/core/solver/types.js';
 import type { Gender, Pal } from '../src/core/save/types.js';
@@ -120,12 +120,63 @@ describe('solver', () => {
 
     expect(diagram).toContain('flowchart TD');
     expect(diagram).toContain('classDef final');
+    expect(diagram).toContain('T_LazyDragon_Electric_icon_normal.webp');
+    expect(diagram).toContain('class pal_0 owned;');
+    expect(diagram).toContain('class step_1 final;');
     expect(diagram).toContain('Relaxaurus Lux');
-    expect(diagram).toContain('&lt;Sparky &quot;One&quot;&gt;');
+    expect(diagram).toContain('<Sparky \\"One\\">');
     expect(diagram).toContain('Jormuntide Ignis');
-    expect(diagram).toContain('Step 1 - final');
+    expect(diagram).toContain('Step 1 final');
     expect(diagram).toContain('keep Artisan + Serious');
     expect(diagram).toContain('-->');
+  });
+
+  it('does not reuse owned Pal nodes across diagram layers', () => {
+    const target = spec();
+    const repeatedParent = makePal('Relaxaurus Lux', 'Male', ['Artisan']);
+    const firstMate = makePal('Jormuntide Ignis', 'Female', ['Serious']);
+    const steps: PlanStep[] = [
+      {
+        index: 1,
+        speciesIndex: findSpecies('Palumba'),
+        mask: 1,
+        parents: [
+          { kind: 'owned', pal: repeatedParent },
+          { kind: 'owned', pal: firstMate },
+        ],
+        expectedEggs: 1,
+        passiveSuccess: 1,
+        genderFactor: 1,
+        genderRequirement: null,
+        expectedUnwanted: 0,
+        isFinal: false,
+      },
+      {
+        index: 2,
+        speciesIndex: findSpecies('Anubis'),
+        mask: 3,
+        parents: [
+          { kind: 'owned', pal: repeatedParent },
+          { kind: 'step', step: 1, speciesIndex: findSpecies('Palumba') },
+        ],
+        expectedEggs: 2,
+        passiveSuccess: 1,
+        genderFactor: 1,
+        genderRequirement: null,
+        expectedUnwanted: 0,
+        isFinal: true,
+      },
+    ];
+
+    const diagram = renderPlanMermaid(steps, target);
+    const repeatedParentNodes = diagram
+      .split('\n')
+      .filter((line) => line.includes('T_LazyDragon_Electric_icon_normal.webp'));
+
+    expect(repeatedParentNodes).toHaveLength(2);
+    expect(diagram).toContain('pal_0 --> step_1');
+    expect(diagram).toContain('pal_2 --> step_2');
+    expect(diagram).not.toContain('pal_0 --> step_2');
   });
 
   it('refuses to pair two owned Pals of the same gender', () => {
