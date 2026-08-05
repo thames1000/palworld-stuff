@@ -4,6 +4,7 @@ import type { Pal } from '@core/save/types';
 import { maskedPassives, type PlanStep, type PlanStepRef } from '@core/solver/steps';
 import type { Feasibility, TargetSpec } from '@core/solver/types';
 import type { SolveSummary } from '../worker/protocol';
+import { PlanDiagram } from './PlanDiagram';
 import { PassiveChip, Panel, Stat, stepOdds } from './ui';
 
 const VERDICTS: Record<Feasibility, { title: string; tone: string; body: string }> = {
@@ -137,6 +138,7 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
   }
 
   const verdict = VERDICTS[summary.feasibility];
+  const solvedSpec = summary.spec ?? spec;
 
   return (
     <div className="space-y-4">
@@ -156,6 +158,8 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
           <Stat label="Pals in scope" value={summary.candidateCount.toLocaleString()} />
         </div>
       )}
+
+      {summary.steps.length > 0 && <PlanDiagram steps={summary.steps} spec={solvedSpec} />}
 
       {summary.existingMatches.length > 0 && (
         <Panel title={`Matching Pals you own (${summary.existingMatches.length})`}>
@@ -184,7 +188,7 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
       {summary.steps.length > 0 && (
         <ol className="space-y-3">
           {summary.steps.map((step) => (
-            <StepCard key={step.index} step={step} required={spec.requiredPassives} />
+            <StepCard key={step.index} step={step} required={solvedSpec.requiredPassives} />
           ))}
         </ol>
       )}
@@ -193,7 +197,7 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
         <Panel title="Closest achievable builds">
           <ul className="space-y-2">
             {summary.alternatives.slice(0, 4).map((alt, i) => {
-              const have = maskedPassives(alt.mask, spec.requiredPassives);
+              const have = maskedPassives(alt.mask, solvedSpec.requiredPassives);
               return (
                 <li key={i} className="flex flex-wrap items-baseline gap-2 text-sm">
                   <span className="font-medium text-ink-0">{speciesName(alt.speciesIndex)}</span>
@@ -228,9 +232,9 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
                 per hatch.
               </li>
             )}
-            {spec.gender && (
+            {solvedSpec.gender && (
               <li>
-                Chance the final hatch is {spec.gender}:{' '}
+                Chance the final hatch is {solvedSpec.gender}:{' '}
                 <span className="nums text-ink-0">
                   {(summary.finalGenderProbability * 100).toFixed(0)}%
                 </span>

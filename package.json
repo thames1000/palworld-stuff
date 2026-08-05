@@ -21,6 +21,7 @@
     "node": "20.x || 22.x || 24.x"
   },
   "dependencies": {
+    "mermaid": "^11.16.1",
     "ooz-wasm": "^2.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

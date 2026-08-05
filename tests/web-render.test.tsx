@@ -138,6 +138,60 @@ describe('web UI', () => {
     expect(html).toContain('Find breeding plan');
   });
 
+  it('renders the diagram surface for a solved plan', () => {
+    const html = renderToString(
+      <PlanView
+        summary={{
+          spec,
+          feasibility: 'breedable',
+          steps: [
+            {
+              index: 1,
+              speciesIndex: findSpecies('Anubis'),
+              mask: 1,
+              parents: [
+                { kind: 'owned', pal: samplePal },
+                {
+                  kind: 'owned',
+                  pal: {
+                    ...samplePal,
+                    instanceId: 'b',
+                    speciesIndex: findSpecies('Jormuntide Ignis'),
+                    gender: 'Female',
+                    passives: [],
+                  },
+                },
+              ],
+              expectedEggs: 3.4,
+              passiveSuccess: 0.3,
+              genderFactor: 1,
+              genderRequirement: null,
+              expectedUnwanted: 0.2,
+              isFinal: true,
+            },
+          ],
+          generations: 1,
+          totalEggs: 3.4,
+          missingPassives: [],
+          existingMatches: [],
+          alternatives: [],
+          finalGenderProbability: 0.5,
+          finalIvProbability: null,
+          diagnostics: [],
+          searchedNodes: 10,
+          elapsedMs: 3,
+          candidateCount: 2,
+        }}
+        spec={spec}
+      />,
+    ).replaceAll('<!-- -->', '');
+
+    expect(html).toContain('Diagram');
+    expect(html).toContain('Copy Mermaid');
+    expect(html).toContain('Mermaid source');
+    expect(html).toContain('flowchart TD');
+  });
+
   it('renders each solver verdict without throwing', () => {
     const verdicts = [
       'breedable',
@@ -150,6 +204,7 @@ describe('web UI', () => {
       const html = renderToString(
         <PlanView
           summary={{
+            spec,
             feasibility,
             steps: [],
             generations: null,

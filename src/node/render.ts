@@ -1,7 +1,9 @@
 /** Human-readable rendering of a breeding plan. */
 import { passiveDisplayName, speciesName, SPECIES } from '../core/data/index.js';
 import type { Pal } from '../core/save/types.js';
+import { renderPlanMermaid } from '../core/solver/diagram.js';
 import { popcount } from '../core/solver/probability.js';
+import { flattenPlan } from '../core/solver/steps.js';
 import type { PlanNode, SolveResult, TargetSpec } from '../core/solver/types.js';
 
 const BOLD = '\x1b[1m';
@@ -171,34 +173,7 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
 
 /** Mermaid flowchart of the plan, for pasting into notes or a web view. */
 export function renderMermaid(plan: PlanNode, spec: TargetSpec): string {
-  const lines = ['flowchart TD'];
-  let counter = 0;
-  const ids = new Map<PlanNode, string>();
-
-  const idFor = (node: PlanNode): string => {
-    let id = ids.get(node);
-    if (id) return id;
-    id = `n${counter++}`;
-    ids.set(node, id);
-    const passives = maskPassives(node.mask, spec.requiredPassives);
-    const name = speciesName(node.speciesIndex);
-    const label = node.source
-      ? `${name}${node.source.nickname ? ` (${node.source.nickname})` : ''}<br/>${passives.join(' + ') || 'no target passives'}<br/>${node.source.location.label}`
-      : `${name}<br/>${passives.join(' + ')}`;
-    lines.push(`    ${id}["${label}"]`);
-    return id;
-  };
-
-  const walk = (node: PlanNode): void => {
-    const id = idFor(node);
-    if (!node.parents) return;
-    for (const parent of node.parents) {
-      walk(parent);
-      lines.push(`    ${idFor(parent)} --> ${id}`);
-    }
-  };
-  walk(plan);
-  return lines.join('\n');
+  return renderPlanMermaid(flattenPlan(plan), spec);
 }
 
 /**

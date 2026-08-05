@@ -24,6 +24,8 @@ export type SolveSource =
   | { kind: 'roster'; pals: Pal[] };
 
 export interface SolveSummary {
+  /** The exact target spec this result was solved against. */
+  spec: TargetSpec;
   feasibility: Feasibility;
   /** Flattened breeding steps, ready to render. Empty when there is no plan. */
   steps: PlanStep[];

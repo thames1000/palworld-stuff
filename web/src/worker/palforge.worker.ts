@@ -52,6 +52,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       post({
         kind: 'solved',
         summary: {
+          spec: request.spec,
           feasibility: result.feasibility,
           steps: result.plan ? flattenPlan(result.plan) : [],
           generations: result.plan?.generation ?? null,

@@ -51,8 +51,9 @@ only `Level.sav` you still get every Pal, but locations degrade to raw container
 The UI has three surfaces:
 
 - **Plan** — target builder on the left (species, required and excluded passives, IV floors,
-  gender, generation cap, optimisation mode), plan on the right: a verdict banner, then
-  numbered steps showing each parent, where to find it, what to keep, and expected eggs.
+  gender, generation cap, optimisation mode), plan on the right: a verdict banner, a
+  rendered Mermaid diagram, then numbered steps showing each parent, where to find it,
+  what to keep, and expected eggs. The diagram can be copied as Mermaid or SVG.
 - **Pals** — every Pal in scope, searchable by species, nickname or passive, filterable by
   gender, location and IV floor, sortable by any column. Click a species to make it the plan
   target. Without a save, this is where you enter the Pals you own instead.

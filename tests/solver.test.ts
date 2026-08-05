@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { findPassive, findSpecies, speciesName } from '../src/core/data/index.js';
+import { renderPlanMermaid } from '../src/core/solver/diagram.js';
 import { solve } from '../src/core/solver/search.js';
+import { flattenPlan } from '../src/core/solver/steps.js';
 import { passiveInheritanceProbability, expectedUnwantedPassives } from '../src/core/solver/probability.js';
 import type { TargetSpec } from '../src/core/solver/types.js';
 import type { Gender, Pal } from '../src/core/save/types.js';
@@ -103,6 +105,27 @@ describe('solver', () => {
     expect(result.plan!.generation).toBe(1);
     expect(result.plan!.parents).not.toBeNull();
     expect(result.plan!.totalEggs).toBeGreaterThan(0);
+  });
+
+  it('renders a clean Mermaid diagram from a solved plan', () => {
+    const target = spec();
+    const pals = [
+      makePal('Relaxaurus Lux', 'Male', ['Artisan']),
+      makePal('Jormuntide Ignis', 'Female', ['Serious']),
+    ];
+    pals[0]!.nickname = '<Sparky "One">';
+
+    const result = solve(pals, target);
+    const diagram = renderPlanMermaid(flattenPlan(result.plan!), target);
+
+    expect(diagram).toContain('flowchart TD');
+    expect(diagram).toContain('classDef final');
+    expect(diagram).toContain('Relaxaurus Lux');
+    expect(diagram).toContain('&lt;Sparky &quot;One&quot;&gt;');
+    expect(diagram).toContain('Jormuntide Ignis');
+    expect(diagram).toContain('Step 1 - final');
+    expect(diagram).toContain('keep Artisan + Serious');
+    expect(diagram).toContain('-->');
   });
 
   it('refuses to pair two owned Pals of the same gender', () => {
