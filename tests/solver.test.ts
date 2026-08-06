@@ -9,7 +9,15 @@ import {
 import { renderPlanMermaid, renderPlanMermaidModel } from '../src/core/solver/diagram.js';
 import { solve } from '../src/core/solver/search.js';
 import { flattenPlan, type PlanStep } from '../src/core/solver/steps.js';
-import { passiveInheritanceProbability, expectedUnwantedPassives } from '../src/core/solver/probability.js';
+import {
+  childIvDistribution,
+  expectedUnwantedPassives,
+  ivProbability,
+  ivSuccessProbability,
+  knownIvDistribution,
+  passiveInheritanceProbability,
+  requiredIvMask,
+} from '../src/core/solver/probability.js';
 import type { PlanNode, TargetSpec } from '../src/core/solver/types.js';
 import type { Gender, Pal } from '../src/core/save/types.js';
 
@@ -122,6 +130,48 @@ describe('probability model', () => {
   it('never predicts more junk passives than the Pal has room for', () => {
     expect(expectedUnwantedPassives(8, 4)).toBe(0);
     expect(expectedUnwantedPassives(8, 1)).toBeLessThanOrEqual(3);
+  });
+
+  it('represents a known Pal as one deterministic IV threshold mask', () => {
+    const thresholds = [90, 90, 90];
+    const distribution = knownIvDistribution([95, 70, 100], thresholds);
+    expect(requiredIvMask(thresholds)).toBe(0b111);
+    expect(distribution[0b101]).toBe(1);
+    expect(distribution.reduce((sum, probability) => sum + probability, 0)).toBe(1);
+  });
+
+  it('matches the direct final-step IV calculation', () => {
+    const thresholds = [90, 90, 90];
+    const parentA = [100, 95, 20];
+    const parentB = [80, 100, 99];
+    const child = childIvDistribution(
+      knownIvDistribution(parentA, thresholds),
+      knownIvDistribution(parentB, thresholds),
+      thresholds,
+    );
+    expect(ivSuccessProbability(child, thresholds)).toBeCloseTo(
+      ivProbability(parentA, parentB, thresholds),
+      12,
+    );
+    expect(child.reduce((sum, probability) => sum + probability, 0)).toBeCloseTo(1, 12);
+  });
+
+  it('carries IV threshold odds through bred parents', () => {
+    const thresholds = [90, 90, 90];
+    const firstGeneration = childIvDistribution(
+      knownIvDistribution([100, 100, 10], thresholds),
+      knownIvDistribution([10, 100, 100], thresholds),
+      thresholds,
+    );
+    const finalGeneration = childIvDistribution(
+      firstGeneration,
+      knownIvDistribution([100, 10, 100], thresholds),
+      thresholds,
+    );
+    const probability = ivSuccessProbability(finalGeneration, thresholds);
+    expect(probability).toBeGreaterThan(0);
+    expect(probability).toBeLessThan(1);
+    expect(finalGeneration.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 12);
   });
 });
 
