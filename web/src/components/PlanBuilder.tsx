@@ -1,6 +1,7 @@
 /** The target specification form: what you want bred, and how you want it optimised. */
+import { speciesName } from '@core/data/index';
 import type { OptimizationMode, TargetSpec } from '@core/solver/types';
-import { Button, Field, Panel, Select, Spinner, TextInput } from './ui';
+import { Button, Field, Panel, PassiveChip, Select, Spinner, TextInput } from './ui';
 import { PassivePicker, SpeciesPicker } from './pickers';
 
 const MODES: Array<{ value: OptimizationMode; label: string; hint: string }> = [
@@ -10,6 +11,108 @@ const MODES: Array<{ value: OptimizationMode; label: string; hint: string }> = [
   { value: 'clean', label: 'Cleanest passives', hint: 'Minimises unwanted passives you will have to breed out.' },
 ];
 
+export interface PlanReadiness {
+  targetOwnedCount: number;
+  coveredRequiredPassives: string[];
+  missingRequiredPassives: string[];
+  excludedCarrierCount: number;
+  unknownGenderCount: number;
+}
+
+function formatIvFloors(minIvs: TargetSpec['minIvs']): string {
+  const parts = [
+    minIvs.hp != null && minIvs.hp > 0 ? `HP ≥ ${minIvs.hp}` : null,
+    minIvs.attack != null && minIvs.attack > 0 ? `Atk ≥ ${minIvs.attack}` : null,
+    minIvs.defense != null && minIvs.defense > 0 ? `Def ≥ ${minIvs.defense}` : null,
+  ].filter((part): part is string => part != null);
+  return parts.length > 0 ? parts.join(', ') : 'Any';
+}
+
+function ReadinessPanel({
+  readiness,
+  candidateCount,
+  spec,
+}: {
+  readiness: PlanReadiness;
+  candidateCount: number;
+  spec: TargetSpec;
+}) {
+  const passiveTotal = spec.requiredPassives.length;
+  const passiveCoverage =
+    passiveTotal === 0
+      ? 'None required'
+      : `${readiness.coveredRequiredPassives.length}/${passiveTotal} in scope`;
+  const status =
+    candidateCount === 0
+      ? { label: 'No candidates', tone: 'border-bad/40 bg-bad/10 text-bad' }
+      : readiness.missingRequiredPassives.length > 0
+        ? { label: 'Passive missing', tone: 'border-warn/40 bg-warn/10 text-warn' }
+        : { label: 'Ready to search', tone: 'border-good/40 bg-good/10 text-good' };
+
+  return (
+    <div className="border-y border-edge/50 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-medium text-ink-1">Readiness</div>
+          <div className="mt-0.5 text-[11px] text-ink-2">
+            Target: <span className="text-ink-1">{speciesName(spec.speciesIndex)}</span>
+          </div>
+        </div>
+        <span className={`rounded border px-2 py-0.5 text-[11px] font-medium ${status.tone}`}>
+          {status.label}
+        </span>
+      </div>
+
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-ink-2">Pals in scope</dt>
+          <dd className="nums text-ink-0">{candidateCount.toLocaleString()}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-ink-2">Target owned</dt>
+          <dd className="nums text-ink-0">{readiness.targetOwnedCount.toLocaleString()}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-ink-2">Required passives</dt>
+          <dd className="text-ink-0">{passiveCoverage}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-ink-2">IV floors</dt>
+          <dd className="nums text-ink-0">{formatIvFloors(spec.minIvs)}</dd>
+        </div>
+        {spec.excludedPassives.length > 0 && (
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-ink-2">Excluded carriers</dt>
+            <dd className="nums text-ink-0">{readiness.excludedCarrierCount.toLocaleString()}</dd>
+          </div>
+        )}
+        {readiness.unknownGenderCount > 0 && (
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-ink-2">Unknown gender</dt>
+            <dd className="nums text-warn">{readiness.unknownGenderCount.toLocaleString()}</dd>
+          </div>
+        )}
+      </dl>
+
+      {readiness.missingRequiredPassives.length > 0 && (
+        <div className="mt-2">
+          <div className="mb-1 text-[11px] text-warn">Missing required passives</div>
+          <div className="flex flex-wrap gap-1">
+            {readiness.missingRequiredPassives.map((p) => (
+              <PassiveChip key={p} internalName={p} />
+            ))}
+          </div>
+        </div>
+      )}
+      {readiness.unknownGenderCount > 0 && (
+        <p className="mt-2 text-[11px] leading-snug text-ink-2">
+          Unknown-gender Pals can make manual routes optimistic.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function PlanBuilder({
   spec,
   onChange,
@@ -17,6 +120,7 @@ export function PlanBuilder({
   solving,
   candidateCount,
   emptyHint,
+  readiness,
 }: {
   spec: TargetSpec;
   onChange: (next: TargetSpec) => void;
@@ -25,6 +129,7 @@ export function PlanBuilder({
   candidateCount: number;
   /** Shown instead of the count when there is nothing to breed from. */
   emptyHint?: string;
+  readiness?: PlanReadiness;
 }) {
   const set = <K extends keyof TargetSpec>(key: K, value: TargetSpec[K]) =>
     onChange({ ...spec, [key]: value });
@@ -79,6 +184,10 @@ export function PlanBuilder({
             placeholder="Add a passive to avoid…"
           />
         </Field>
+
+        {readiness && (
+          <ReadinessPanel readiness={readiness} candidateCount={candidateCount} spec={spec} />
+        )}
 
         <div className="rounded-md border border-edge/60 bg-surface-2/40 p-3">
           <div className="text-xs font-medium text-ink-1">Final IV odds estimate</div>

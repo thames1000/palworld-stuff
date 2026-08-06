@@ -79,6 +79,56 @@ function ParentSlot({ label, parent }: { label: string; parent: PlanStepRef }) {
   );
 }
 
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i]);
+}
+
+function sameSpec(a: TargetSpec, b: TargetSpec): boolean {
+  return (
+    a.speciesIndex === b.speciesIndex &&
+    sameList(a.requiredPassives, b.requiredPassives) &&
+    sameList(a.excludedPassives, b.excludedPassives) &&
+    a.minIvs.hp === b.minIvs.hp &&
+    a.minIvs.attack === b.minIvs.attack &&
+    a.minIvs.defense === b.minIvs.defense &&
+    a.gender === b.gender &&
+    a.maxGenerations === b.maxGenerations &&
+    a.mode === b.mode &&
+    a.beamSize === b.beamSize &&
+    a.allowExcludedParents === b.allowExcludedParents
+  );
+}
+
+function ivSummary(minIvs: TargetSpec['minIvs']): string | null {
+  const parts = [
+    minIvs.hp != null && minIvs.hp > 0 ? `HP ≥ ${minIvs.hp}` : null,
+    minIvs.attack != null && minIvs.attack > 0 ? `Attack ≥ ${minIvs.attack}` : null,
+    minIvs.defense != null && minIvs.defense > 0 ? `Defense ≥ ${minIvs.defense}` : null,
+  ].filter((part): part is string => part != null);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
+function TargetSummary({ spec }: { spec: TargetSpec }) {
+  const ivs = ivSummary(spec.minIvs);
+  return (
+    <div className="mx-auto max-w-xl text-left">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="text-[11px] uppercase tracking-wide text-ink-2">Current target</span>
+        <span className="text-sm font-semibold text-ink-0">{speciesName(spec.speciesIndex)}</span>
+        {spec.gender && <span className="text-xs text-ink-1">{spec.gender}</span>}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {spec.requiredPassives.length > 0 ? (
+          spec.requiredPassives.map((p) => <PassiveChip key={p} internalName={p} />)
+        ) : (
+          <span className="text-xs text-ink-2">No passive requirements</span>
+        )}
+      </div>
+      {ivs && <div className="nums mt-2 text-xs text-ink-1">IV floors: {ivs}</div>}
+    </div>
+  );
+}
+
 export function StepCard({
   step,
   required,
@@ -155,18 +205,32 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
   if (!summary) {
     return (
       <Panel title="Plan">
-        <p className="py-8 text-center text-sm text-ink-2">
-          Pick a target and press <span className="text-ink-1">Find breeding plan</span>.
-        </p>
+        <div className="space-y-4 py-8 text-center">
+          <TargetSummary spec={spec} />
+          <p className="text-sm text-ink-2">
+            Pick a target and press <span className="text-ink-1">Find breeding plan</span>.
+          </p>
+        </div>
       </Panel>
     );
   }
 
   const verdict = VERDICTS[summary.feasibility];
-  const solvedSpec = summary.spec ?? spec;
+  const solvedSpec = summary.spec;
+  const stale = !sameSpec(solvedSpec, spec);
 
   return (
     <div className="space-y-4">
+      {stale && (
+        <div className="rounded-lg border border-warn/40 bg-warn/10 px-4 py-3 text-warn">
+          <p className="text-sm font-semibold">Plan is from an earlier target</p>
+          <p className="mt-0.5 text-xs opacity-90">
+            Showing {speciesName(solvedSpec.speciesIndex)}; current target is{' '}
+            {speciesName(spec.speciesIndex)}.
+          </p>
+        </div>
+      )}
+
       <div className={`rounded-lg border px-4 py-3 ${verdict.tone}`}>
         <p className="text-sm font-semibold">{verdict.title}</p>
         <p className="mt-0.5 text-xs opacity-90">{verdict.body}</p>

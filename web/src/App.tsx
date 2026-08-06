@@ -8,7 +8,7 @@ import { useManualPlan } from './lib/manualPlan';
 import { usePalforge } from './lib/usePalforge';
 import { DropZone } from './components/DropZone';
 import { PalTable } from './components/PalTable';
-import { PlanBuilder } from './components/PlanBuilder';
+import { PlanBuilder, type PlanReadiness } from './components/PlanBuilder';
 import { PlanView } from './components/PlanView';
 import { RosterEditor } from './components/RosterEditor';
 import { Button, Select, Spinner } from './components/ui';
@@ -61,6 +61,25 @@ export default function App() {
 
   // Everything downstream works off one pool, whichever surface filled it.
   const pool = manualMode ? rosterPals : scopedPals;
+
+  const readiness = useMemo<PlanReadiness>(() => {
+    const coveredRequiredPassives = spec.requiredPassives.filter((passive) =>
+      pool.some((pal) => pal.passives.includes(passive)),
+    );
+    const excluded = new Set(spec.excludedPassives);
+    return {
+      targetOwnedCount: pool.filter((pal) => pal.speciesIndex === spec.speciesIndex).length,
+      coveredRequiredPassives,
+      missingRequiredPassives: spec.requiredPassives.filter(
+        (passive) => !coveredRequiredPassives.includes(passive),
+      ),
+      excludedCarrierCount:
+        excluded.size === 0
+          ? 0
+          : pool.filter((pal) => pal.passives.some((passive) => excluded.has(passive))).length,
+      unknownGenderCount: pool.filter((pal) => pal.gender === 'Unknown').length,
+    };
+  }, [pool, spec]);
 
   const solveSource: SolveSource = manualMode
     ? { kind: 'roster', pals: rosterPals }
@@ -218,6 +237,7 @@ export default function App() {
                     ? 'Add the Pals you own under My Pals, or build a route by hand under Explore.'
                     : undefined
                 }
+                readiness={readiness}
               />
             </div>
             <PlanView summary={forge.summary} spec={spec} />

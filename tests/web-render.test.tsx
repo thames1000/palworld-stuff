@@ -123,6 +123,41 @@ describe('web UI', () => {
     expect(html).toContain('IV rerolls are included in expected egg totals');
   });
 
+  it('preflights the target against the current Pal pool before solving', () => {
+    const html = renderToString(
+      <PlanBuilder
+        spec={{
+          ...spec,
+          requiredPassives: [
+            findPassive('Artisan')!.internalName,
+            findPassive('Legend')!.internalName,
+          ],
+          excludedPassives: [findPassive('Clumsy')!.internalName],
+          minIvs: { hp: 90, attack: null, defense: null },
+        }}
+        onChange={() => {}}
+        onSolve={() => {}}
+        solving={false}
+        candidateCount={12}
+        readiness={{
+          targetOwnedCount: 1,
+          coveredRequiredPassives: [findPassive('Artisan')!.internalName],
+          missingRequiredPassives: [findPassive('Legend')!.internalName],
+          excludedCarrierCount: 2,
+          unknownGenderCount: 3,
+        }}
+      />,
+    ).replaceAll('<!-- -->', '');
+    expect(html).toContain('Readiness');
+    expect(html).toContain('Passive missing');
+    expect(html).toContain('12');
+    expect(html).toContain('1/2 in scope');
+    expect(html).toContain('HP ≥ 90');
+    expect(html).toContain('Excluded carriers');
+    expect(html).toContain('Unknown gender');
+    expect(html).toContain('Legend');
+  });
+
   it('renders the drop zone before a save is loaded', () => {
     const html = renderToString(<App />);
     expect(html).toContain('Drop your Palworld world folder here');
@@ -176,7 +211,37 @@ describe('web UI', () => {
 
   it('renders an empty plan panel without a summary', () => {
     const html = renderToString(<PlanView summary={null} spec={spec} />);
+    expect(html).toContain('Current target');
+    expect(html).toContain('Anubis');
+    expect(html).toContain('Artisan');
     expect(html).toContain('Find breeding plan');
+  });
+
+  it('warns when the displayed plan no longer matches the edited target', () => {
+    const html = renderToString(
+      <PlanView
+        summary={{
+          spec,
+          feasibility: 'breedable',
+          steps: [],
+          generations: null,
+          totalEggs: null,
+          missingPassives: [],
+          existingMatches: [],
+          alternatives: [],
+          finalGenderProbability: 0.5,
+          finalIvProbability: null,
+          diagnostics: [],
+          searchedNodes: 10,
+          elapsedMs: 3,
+          candidateCount: 1,
+        }}
+        spec={{ ...spec, speciesIndex: findSpecies('Penking') }}
+      />,
+    ).replaceAll('<!-- -->', '');
+    expect(html).toContain('Plan is from an earlier target');
+    expect(html).toContain('Showing Anubis');
+    expect(html).toContain('current target is Penking');
   });
 
   it('renders the diagram surface for a solved plan', () => {
