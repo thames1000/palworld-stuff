@@ -25,6 +25,7 @@ import { expectedProductionCycles, ivRollModelForCake } from './cakes.js';
 import {
   isMutationPassive,
   mutationChancePerHatch,
+  mutationPassiveChance,
   mutationResultChanceForChild,
   mutationResultsForPair,
 } from './mutations.js';
@@ -89,8 +90,16 @@ function mutationPassiveOutlook(
   b: Pal,
   required: readonly string[],
   requiredIndex: ReadonlyMap<string, number>,
-): { success: number; missing: string[]; assumed: string[]; inherited: string[] } {
-  if (required.length === 0) return { success: 1, missing: [], assumed: [], inherited: [] };
+): {
+  success: number;
+  missing: string[];
+  assumed: string[];
+  inherited: string[];
+  mutationPassiveChance: number;
+} {
+  if (required.length === 0) {
+    return { success: 1, missing: [], assumed: [], inherited: [], mutationPassiveChance: 1 };
+  }
 
   let mask = 0;
   const pool = new Set<string>();
@@ -108,12 +117,16 @@ function mutationPassiveOutlook(
   const missing = required.filter(
     (passive, index) => (mask & (1 << index)) === 0 && !isMutationPassive(passive),
   );
-  if (missing.length > 0) return { success: 0, missing, assumed, inherited };
+  const mutationRollChance = mutationPassiveChance(assumed);
+  if (missing.length > 0 || mutationRollChance <= 0) {
+    return { success: 0, missing, assumed, inherited, mutationPassiveChance: mutationRollChance };
+  }
   return {
     success: passiveInheritanceProbability(Math.max(1, pool.size), inherited.length),
     missing,
     assumed,
     inherited,
+    mutationPassiveChance: mutationRollChance,
   };
 }
 
@@ -177,7 +190,8 @@ function allMutationAttempts(
 
       const passive = mutationPassiveOutlook(a, b, spec.requiredPassives, requiredIndex);
       const speciesChancePerHatch = mutationChance * (targetShare / 100) * targetGenderProbability;
-      const targetChancePerHatch = speciesChancePerHatch * passive.success * ivSuccess;
+      const targetChancePerHatch =
+        speciesChancePerHatch * passive.success * passive.mutationPassiveChance * ivSuccess;
       attempts.push({
         parentA: a,
         parentB: b,
@@ -189,6 +203,7 @@ function allMutationAttempts(
         expectedTargetHatches: targetChancePerHatch > 0 ? 1 / targetChancePerHatch : null,
         targetGenderProbability,
         passiveSuccess: passive.success,
+        mutationPassiveChance: passive.mutationPassiveChance,
         assumedPassives: passive.assumed,
         inheritedPassives: passive.inherited,
         missingPassives: passive.missing,
@@ -227,6 +242,9 @@ function mutationSeedNode(
   const assumedMask = assumedPassive
     ? requiredPassiveMask([assumedPassive], requiredIndex)
     : 0;
+  const assumedPassives = assumedPassive ? [assumedPassive] : [];
+  const mutationRollChance = mutationPassiveChance(assumedPassives);
+  if (mutationRollChance <= 0) return null;
   const childMask = inheritedMask | assumedMask;
   const inheritedCount = popcount(inheritedMask);
   const passiveSuccess = passiveInheritanceProbability(Math.max(1, parentPool.size), inheritedCount);
@@ -237,13 +255,14 @@ function mutationSeedNode(
   const ivStepSuccess = wantsIvs ? ivSuccessProbability(ivDistribution, thresholds) : 1;
   if (ivStepSuccess <= 0) return null;
 
-  const stepEggs = 1 / (speciesChancePerHatch * passiveSuccess * ivStepSuccess);
+  const stepEggs = 1 / (speciesChancePerHatch * passiveSuccess * mutationRollChance * ivStepSuccess);
   const mutation: MutationStepInfo = {
     kind,
     targetShare,
     mutationChancePerHatch: mutationChance,
     speciesChancePerHatch,
-    assumedPassives: assumedPassive ? [assumedPassive] : [],
+    mutationPassiveChance: mutationRollChance,
+    assumedPassives,
     inheritedPassives: maskedRequiredPassives(inheritedMask, spec.requiredPassives),
     mutationIvFloor: MUTATION_IV_FLOOR,
   };
@@ -285,6 +304,9 @@ function regularChildMutationNode(
   const assumedMask = assumedPassive
     ? requiredPassiveMask([assumedPassive], requiredIndex)
     : 0;
+  const assumedPassives = assumedPassive ? [assumedPassive] : [];
+  const mutationRollChance = mutationPassiveChance(assumedPassives);
+  if (mutationRollChance <= 0) return null;
   const childMask = inheritedMask | assumedMask;
   const desiredCount = popcount(inheritedMask);
 
@@ -293,13 +315,14 @@ function regularChildMutationNode(
   const ivStepSuccess = wantsIvs ? ivSuccessProbability(ivDistribution, thresholds) : 1;
   if (ivStepSuccess <= 0) return null;
 
-  const stepEggs = step.stepEggs / (mutationChance * ivStepSuccess);
+  const stepEggs = step.stepEggs / (mutationChance * mutationRollChance * ivStepSuccess);
   const mutation: MutationStepInfo = {
     kind: 'regular-child',
     targetShare: 100,
     mutationChancePerHatch: mutationChance,
     speciesChancePerHatch: mutationChance,
-    assumedPassives: assumedPassive ? [assumedPassive] : [],
+    mutationPassiveChance: mutationRollChance,
+    assumedPassives,
     inheritedPassives: maskedRequiredPassives(inheritedMask, spec.requiredPassives),
     mutationIvFloor: MUTATION_IV_FLOOR,
   };

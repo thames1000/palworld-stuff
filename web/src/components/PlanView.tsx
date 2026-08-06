@@ -241,13 +241,14 @@ export function StepCard({
         )}
         {mutation && mutation.assumedPassives.length > 0 && (
           <p className="mt-1 text-[11px] text-warn">
-            Assumes the mutated hatch supplies{' '}
+            Assumes the mutated hatch rolls{' '}
             <span className="inline-flex flex-wrap gap-1 align-middle">
               {mutation.assumedPassives.map((passive) => (
                 <PassiveChip key={passive} internalName={passive} />
               ))}
             </span>
-            .
+            {' '}
+            <span className="nums text-ink-0">({percent(mutation.mutationPassiveChance)} of mutated hatches)</span>.
           </p>
         )}
         {mutation && mutation.inheritedPassives.length > 0 && (
@@ -369,13 +370,14 @@ function MutationAttemptCard({
         </p>
         {attempt.assumedPassives.length > 0 && (
           <p className="text-warn">
-            Assumes the mutated hatch supplies{' '}
+            Assumes the mutated hatch rolls{' '}
             <span className="inline-flex flex-wrap gap-1 align-middle">
               {attempt.assumedPassives.map((passive) => (
                 <PassiveChip key={passive} internalName={passive} />
               ))}
             </span>
-            .
+            {' '}
+            <span className="nums text-ink-0">({percent(attempt.mutationPassiveChance)} of mutated hatches)</span>.
           </p>
         )}
         {attempt.inheritedPassives.length > 0 && attempt.missingPassives.length === 0 && (

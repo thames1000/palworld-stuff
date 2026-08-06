@@ -31,6 +31,7 @@ import {
   isMutationPassive,
   mutationChanceAfterHatches,
   mutationChancePerHatch,
+  mutationPassiveChance,
   mutationParentsForChild,
   mutationResultChanceForChild,
   mutationResultsForPair,
@@ -208,6 +209,15 @@ describe('probability model', () => {
     expect(hatchesForMutationConfidence(0.01, 0.5)).toBe(69);
     expect(hatchesForMutationConfidence(0.03, 0.5)).toBe(23);
     expect(isMutationPassive(findPassive('Skymarcher')!.internalName)).toBe(true);
+    expect(isMutationPassive(findPassive('Idiosyncratic')!.internalName)).toBe(true);
+    expect(mutationPassiveChance([findPassive('Idiosyncratic')!.internalName])).toBeCloseTo(0.2, 12);
+    expect(
+      mutationPassiveChance([
+        findPassive('Idiosyncratic')!.internalName,
+        findPassive('Immortality')!.internalName,
+      ]),
+    ).toBe(0);
+    expect(mutationPassiveChance([findPassive('Artisan')!.internalName])).toBe(0);
   });
 
   it('models possible mutated children and reverse mutation parents', () => {
@@ -322,6 +332,7 @@ describe('solver', () => {
     expect(result.plan).not.toBeNull();
     expect(result.missingPassives).toEqual([immortality]);
     expect(result.plan!.mutation?.assumedPassives).toEqual([immortality]);
+    expect(result.plan!.mutation?.mutationPassiveChance).toBeCloseTo(0.2, 12);
     expect(result.plan!.mutation?.targetShare).toBeCloseTo(15 / 41 * 100, 12);
     expect(flattenPlan(result.plan!)[0]!.mutation?.assumedPassives).toEqual([immortality]);
   });
@@ -347,7 +358,8 @@ describe('solver', () => {
     expect(result.plan!.speciesIndex).toBe(findSpecies('Anubis'));
     expect(result.plan!.mutation?.kind).toBe('regular-child');
     expect(result.plan!.mutation?.assumedPassives).toEqual([idiosyncratic]);
-    expect(result.plan!.totalEggs).toBeCloseTo(1 / 0.03, 12);
+    expect(result.plan!.mutation?.mutationPassiveChance).toBeCloseTo(0.2, 12);
+    expect(result.plan!.totalEggs).toBeCloseTo(1 / (0.03 * 0.2), 12);
     expect(flattenPlan(result.plan!)).toHaveLength(1);
   });
 
@@ -372,7 +384,9 @@ describe('solver', () => {
     expect(result.feasibility).toBe('mutation-assisted');
     expect(result.plan).not.toBeNull();
     expect(result.plan!.speciesIndex).toBe(findSpecies('Anubis'));
-    expect(steps.some((step) => step.mutation?.assumedPassives.includes(idiosyncratic))).toBe(true);
+    const mutationStep = steps.find((step) => step.mutation?.assumedPassives.includes(idiosyncratic));
+    expect(mutationStep).toBeTruthy();
+    expect(mutationStep!.mutation?.mutationPassiveChance).toBeCloseTo(0.2, 12);
     expect(steps.at(-1)?.speciesIndex).toBe(findSpecies('Anubis'));
   });
 

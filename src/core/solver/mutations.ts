@@ -10,7 +10,16 @@ const EXTRAVAGANT_MUTATION_CHANCE = 0.03;
 const MUTATION_RANK_COEFFICIENT = 0.5;
 const MUTATION_RANK_DIFF_PENALTY = 0.4;
 const MUTATION_RANDOM_COEFFICIENT = 0.1;
-const EXTRA_MUTATION_PASSIVE_INTERNAL_NAMES = new Set(['RideJumpCount_Increase2']);
+
+export const MUTATION_PASSIVE_INTERNAL_NAMES = [
+  'MutationPal_Babysitter',
+  'MutationPal_Mutant',
+  'MutationPal_Immortal',
+  'MutationPal_ExplosionResist',
+  'RideJumpCount_Increase2',
+] as const;
+
+const MUTATION_PASSIVE_SET = new Set<string>(MUTATION_PASSIVE_INTERNAL_NAMES);
 
 /**
  * Pals Palpedia marks `ignoreCombi`, meaning they can exist in breeding data but should not
@@ -69,7 +78,16 @@ export function mutationChancePerHatch(cake: CakeVariant | undefined): number {
 }
 
 export function isMutationPassive(internalName: string): boolean {
-  return internalName.startsWith('MutationPal_') || EXTRA_MUTATION_PASSIVE_INTERNAL_NAMES.has(internalName);
+  return MUTATION_PASSIVE_SET.has(internalName);
+}
+
+export function mutationPassiveChance(passives: readonly string[]): number {
+  const unique = new Set(passives);
+  if (unique.size === 0) return 1;
+  for (const passive of unique) {
+    if (!isMutationPassive(passive)) return 0;
+  }
+  return unique.size === 1 ? 1 / MUTATION_PASSIVE_INTERNAL_NAMES.length : 0;
 }
 
 export function mutationChanceAfterHatches(

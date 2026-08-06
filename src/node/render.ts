@@ -174,7 +174,7 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
           lines.push(
             `       assumes mutation passive(s): ${step.mutation.assumedPassives
               .map(passiveDisplayName)
-              .join(', ')}`,
+              .join(', ')} (${percent(step.mutation.mutationPassiveChance)} of mutated hatches)`,
           );
         }
       }
@@ -268,7 +268,7 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
             DIM,
             `    assumes mutation passive(s): ${attempt.assumedPassives
               .map(passiveDisplayName)
-              .join(', ')}`,
+              .join(', ')} (${percent(attempt.mutationPassiveChance)} of mutated hatches)`,
           ),
         );
       } else if (spec.requiredPassives.length > 0) {
@@ -347,6 +347,7 @@ export function planToJson(result: SolveResult, spec: TargetSpec): unknown {
             kind: step.mutation.kind,
             mutationChancePerHatch: step.mutation.mutationChancePerHatch,
             speciesChancePerHatch: step.mutation.speciesChancePerHatch,
+            mutationPassiveChance: step.mutation.mutationPassiveChance,
             assumedPassives: step.mutation.assumedPassives.map(passiveDisplayName),
             inheritedPassives: step.mutation.inheritedPassives.map(passiveDisplayName),
             mutationIvFloor: step.mutation.mutationIvFloor,
@@ -406,6 +407,7 @@ export function planToJson(result: SolveResult, spec: TargetSpec): unknown {
           : Number(expectedProductionCycles(attempt.expectedTargetHatches, spec.cake).toFixed(2)),
       targetGenderProbability: attempt.targetGenderProbability,
       passiveSuccess: attempt.passiveSuccess,
+      mutationPassiveChance: attempt.mutationPassiveChance,
       assumedPassives: attempt.assumedPassives.map(passiveDisplayName),
       inheritedPassives: attempt.inheritedPassives.map(passiveDisplayName),
       missingPassives: attempt.missingPassives.map(passiveDisplayName),

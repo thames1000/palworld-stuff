@@ -318,9 +318,9 @@ function MutationCalculator() {
         ))}
       </div>
       <p className="mt-2 text-[11px] leading-snug text-ink-2">
-        Assumes each produced egg rolls independently: regular, Mushroom, Vegetable and Special Cake use
-        1.0% per hatch; Extravagant Vegetable Cake uses 3.0%. Vegetable Cake changes cycles by
-        producing two eggs at once.
+        Regular, Mushroom, Vegetable and Special Cake use the base 1.0% mutation rate; Extravagant
+        Vegetable Cake uses 3.0%. Vegetable Cake improves egg throughput, but current mutation reports
+        do not treat it as a true mutation-rate upgrade.
       </p>
     </Panel>
   );

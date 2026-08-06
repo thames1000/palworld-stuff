@@ -97,6 +97,8 @@ export interface MutationStepInfo {
   targetShare: number;
   mutationChancePerHatch: number;
   speciesChancePerHatch: number;
+  /** Chance a mutated hatch rolls the requested mutation-exclusive passive(s). */
+  mutationPassiveChance: number;
   /** Mutation-exclusive passives this step assumes the mutated hatch can supply. */
   assumedPassives: string[];
   /** Target passives still inherited from the parent pool on this step. */
@@ -121,8 +123,10 @@ export interface MutationAttempt {
   expectedTargetHatches: number | null;
   /** Gender odds included in `targetChancePerHatch`; 1 when no gender was requested. */
   targetGenderProbability: number;
-  /** Chance the mutated target carries every requested passive from these parents. */
+  /** Chance the mutated target inherits every requested passive present on these parents. */
   passiveSuccess: number;
+  /** Chance the mutated target rolls every assumed mutation-exclusive passive. */
+  mutationPassiveChance: number;
   /** Mutation-exclusive passives this target attempt assumes the mutated hatch can supply. */
   assumedPassives: string[];
   /** Target passives still inherited from the parent pool. */

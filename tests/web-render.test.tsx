@@ -432,6 +432,7 @@ describe('web UI', () => {
                 targetShare: 15 / 41 * 100,
                 mutationChancePerHatch: 0.03,
                 speciesChancePerHatch: 0.03 * (15 / 41),
+                mutationPassiveChance: 0.2,
                 assumedPassives: [immortality],
                 inheritedPassives: [],
                 mutationIvFloor: 90,
@@ -458,7 +459,8 @@ describe('web UI', () => {
 
     expect(html).toContain('Possible with mutation help');
     expect(html).toContain('mutation species');
-    expect(html).toContain('Assumes the mutated hatch supplies');
+    expect(html).toContain('Assumes the mutated hatch rolls');
+    expect(html).toContain('20.0% of mutated hatches');
     expect(html).toContain('Immortality');
     expect(html).toContain('Mutation-supplied passives');
     expect(html).toContain('minimum 90+ IVs');
@@ -643,7 +645,7 @@ describe('planning without a save', () => {
     expect(html).toContain('Target chance');
     expect(html).toContain('Mutation passives');
     expect(html).toContain('Skymarcher');
-    expect(html).toContain('1.0% per hatch');
+    expect(html).toContain('base 1.0% mutation rate');
     expect(html).toContain('3.0%');
     expect(html).toContain('Mutation result lookup');
     expect(html).toContain('Possible mutated children');
