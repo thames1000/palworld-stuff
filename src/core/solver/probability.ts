@@ -22,6 +22,107 @@ const P_INHERIT_COUNT = normalize(MECHANICS.passiveInheritanceWeights);
 const P_RANDOM_COUNT = normalize(MECHANICS.passiveRandomWeights);
 const P_IV_INHERIT_COUNT = normalize(MECHANICS.ivInheritanceWeights);
 
+/**
+ * Probability mass over the eight possible threshold-satisfaction masks for HP, attack
+ * and defense. A set bit means that stat meets its requested threshold. Keeping the joint
+ * mask, rather than three independent percentages, preserves correlations introduced by
+ * the game's "inherit k stats" roll while remaining tiny enough to carry through a route.
+ */
+export type IvDistribution = readonly [number, number, number, number, number, number, number, number];
+
+function emptyIvDistribution(): number[] {
+  return Array<number>(8).fill(0);
+}
+
+export function requiredIvMask(thresholds: readonly (number | null)[]): number {
+  let mask = 0;
+  for (let i = 0; i < 3; i++) {
+    if (thresholds[i] != null && thresholds[i]! > 0) mask |= 1 << i;
+  }
+  return mask;
+}
+
+/** Threshold state for a Pal whose exact IV values are known. */
+export function knownIvDistribution(
+  ivs: readonly number[],
+  thresholds: readonly (number | null)[],
+): IvDistribution {
+  let mask = 0;
+  for (let i = 0; i < 3; i++) {
+    const threshold = thresholds[i];
+    if (threshold != null && threshold > 0 && (ivs[i] ?? 0) >= threshold) mask |= 1 << i;
+  }
+  const distribution = emptyIvDistribution();
+  distribution[mask] = 1;
+  return distribution as unknown as IvDistribution;
+}
+
+/**
+ * Propagates threshold odds through one breeding step.
+ *
+ * Parent distributions may themselves come from earlier breeding steps. For every parent
+ * state and inherited-stat subset, the child either takes that stat from a random parent or
+ * rolls it fresh. Enumerating only eight masks retains the useful joint probability without
+ * tracking all 101^3 exact IV combinations.
+ */
+export function childIvDistribution(
+  parentA: IvDistribution,
+  parentB: IvDistribution,
+  thresholds: readonly (number | null)[],
+): IvDistribution {
+  const requiredMask = requiredIvMask(thresholds);
+  if (requiredMask === 0) return knownIvDistribution([], thresholds);
+
+  const out = emptyIvDistribution();
+  for (let maskA = 0; maskA < 8; maskA++) {
+    if (parentA[maskA] === 0) continue;
+    for (let maskB = 0; maskB < 8; maskB++) {
+      const parentWeight = parentA[maskA] * parentB[maskB];
+      if (parentWeight === 0) continue;
+
+      for (const [inheritedCount, countWeight] of P_IV_INHERIT_COUNT) {
+        const subsets = choose(3, inheritedCount);
+        if (subsets === 0) continue;
+        for (let inheritedMask = 0; inheritedMask < 8; inheritedMask++) {
+          if (popcount(inheritedMask) !== inheritedCount) continue;
+
+          const passChance = [0, 0, 0];
+          for (let stat = 0; stat < 3; stat++) {
+            if ((requiredMask & (1 << stat)) === 0) continue;
+            if ((inheritedMask & (1 << stat)) !== 0) {
+              passChance[stat] =
+                (((maskA & (1 << stat)) !== 0 ? 1 : 0) +
+                  ((maskB & (1 << stat)) !== 0 ? 1 : 0)) /
+                2;
+            } else {
+              passChance[stat] = Math.max(0, (100 - thresholds[stat]! + 1) / 101);
+            }
+          }
+
+          for (let childMask = 0; childMask < 8; childMask++) {
+            if ((childMask & ~requiredMask) !== 0) continue;
+            let probability = 1;
+            for (let stat = 0; stat < 3; stat++) {
+              if ((requiredMask & (1 << stat)) === 0) continue;
+              const passes = (childMask & (1 << stat)) !== 0;
+              probability *= passes ? passChance[stat]! : 1 - passChance[stat]!;
+            }
+            out[childMask] += (parentWeight * countWeight * probability) / subsets;
+          }
+        }
+      }
+    }
+  }
+  return out as unknown as IvDistribution;
+}
+
+export function ivSuccessProbability(
+  distribution: IvDistribution,
+  thresholds: readonly (number | null)[],
+): number {
+  return distribution[requiredIvMask(thresholds)] ?? 0;
+}
+
 const binomCache = new Map<number, number>();
 function choose(n: number, k: number): number {
   if (k < 0 || k > n) return 0;
@@ -103,39 +204,12 @@ export function ivProbability(
   parentB: readonly number[],
   thresholds: readonly (number | null)[],
 ): number {
-  const required: number[] = [];
-  for (let i = 0; i < 3; i++) if (thresholds[i] != null && thresholds[i]! > 0) required.push(i);
-  if (required.length === 0) return 1;
-
-  // Per-stat probability of satisfying the threshold, conditional on whether that stat
-  // was inherited or rolled fresh.
-  const pInherited: number[] = [];
-  const pRandom: number[] = [];
-  for (const i of required) {
-    const t = thresholds[i]!;
-    const a = parentA[i] ?? 0;
-    const b = parentB[i] ?? 0;
-    pInherited.push(((a >= t ? 1 : 0) + (b >= t ? 1 : 0)) / 2);
-    pRandom.push(Math.max(0, (100 - t + 1) / 101));
-  }
-
-  let total = 0;
-  for (const [k, weight] of P_IV_INHERIT_COUNT) {
-    // Each subset of k inherited stats is equally likely.
-    const subsets = choose(3, k);
-    if (subsets === 0) continue;
-    let acc = 0;
-    for (let mask = 0; mask < 8; mask++) {
-      if (popcount(mask) !== k) continue;
-      let p = 1;
-      required.forEach((statIndex, idx) => {
-        p *= (mask & (1 << statIndex)) !== 0 ? pInherited[idx]! : pRandom[idx]!;
-      });
-      acc += p;
-    }
-    total += (weight * acc) / subsets;
-  }
-  return total;
+  const distribution = childIvDistribution(
+    knownIvDistribution(parentA, thresholds),
+    knownIvDistribution(parentB, thresholds),
+    thresholds,
+  );
+  return ivSuccessProbability(distribution, thresholds);
 }
 
 export function popcount(n: number): number {
