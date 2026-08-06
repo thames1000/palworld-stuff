@@ -108,7 +108,7 @@ function explorer(tree: ManualNode, pool: Pal[] = []) {
 }
 
 describe('web UI', () => {
-  it('describes IV inputs as estimates rather than route constraints', () => {
+  it('explains how IV targets currently affect route planning', () => {
     const html = renderToString(
       <PlanBuilder
         spec={spec}
@@ -119,7 +119,8 @@ describe('web UI', () => {
       />,
     );
     expect(html).toContain('Final IV odds estimate');
-    expect(html).toContain('do not affect route selection yet');
+    expect(html).toContain('prefer routes likely to reach your thresholds');
+    expect(html).toContain('IV rerolls are included in expected egg totals');
   });
 
   it('renders the drop zone before a save is loaded', () => {
@@ -182,7 +183,7 @@ describe('web UI', () => {
     const html = renderToString(
       <PlanView
         summary={{
-          spec,
+          spec: { ...spec, minIvs: { hp: 90, attack: 90, defense: 90 } },
           feasibility: 'breedable',
           steps: [
             {
@@ -204,6 +205,7 @@ describe('web UI', () => {
               ],
               expectedEggs: 3.4,
               passiveSuccess: 0.3,
+              ivSuccess: 0.125,
               genderFactor: 1,
               genderRequirement: null,
               expectedUnwanted: 0.2,
@@ -222,7 +224,7 @@ describe('web UI', () => {
           elapsedMs: 3,
           candidateCount: 2,
         }}
-        spec={spec}
+        spec={{ ...spec, minIvs: { hp: 90, attack: 90, defense: 90 } }}
       />,
     ).replaceAll('<!-- -->', '');
 
@@ -230,6 +232,8 @@ describe('web UI', () => {
     expect(html).toContain('Copy Mermaid');
     expect(html).toContain('Mermaid source');
     expect(html).toContain('flowchart TD');
+    expect(html).toContain('12.5% IVs');
+    expect(html).toContain('HP ≥ 90, Attack ≥ 90, Defense ≥ 90');
   });
 
   it('renders each solver verdict without throwing', () => {

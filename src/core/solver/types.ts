@@ -1,5 +1,6 @@
 import type { Pal } from '../save/types.js';
 import type { GenderRequirement } from './pairing.js';
+import type { IvDistribution } from './probability.js';
 
 export type { GenderRequirement } from './pairing.js';
 
@@ -35,13 +36,13 @@ export interface PlanNode {
   generation: number;
   /** Distinct passives assumed present when this node acts as a parent. */
   poolSize: number;
-  /** Expected eggs for this single breeding step. 0 for an owned Pal. */
+  /** Expected eggs for this step's passive and IV keep rules. 0 for an owned Pal. */
   stepEggs: number;
   /**
    * Chance a hatch at this step carries every wanted passive.
    *
-   * The child's species is determined by the parents, so this is the only genuine per-egg
-   * uncertainty. 1 for an owned Pal, and for a step with no passives riding on it.
+   * The child's species is determined by the parents. IV success is tracked separately;
+   * this is 1 for an owned Pal and for a step with no passives riding on it.
    */
   passiveSuccess: number;
   /**
@@ -56,6 +57,10 @@ export interface PlanNode {
   totalEggs: number;
   /** Expected junk passives on this node's Pal. */
   expectedUnwanted: number;
+  /** Joint probability that this Pal meets each requested IV threshold combination. */
+  ivDistribution?: IvDistribution;
+  /** Chance this step's hatch meets every requested IV threshold. */
+  ivStepSuccess?: number;
   /** Set when this node is a Pal you already own. */
   source: Pal | null;
   parents: [PlanNode, PlanNode] | null;

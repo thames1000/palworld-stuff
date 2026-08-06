@@ -189,9 +189,9 @@ These drive the egg estimates, so they are worth knowing:
   practice you re-roll until you get a reasonably clean child, so this is the optimistic end
   of the range. Expected junk is reported separately, and `--mode clean` optimises against it.
 - Success at a step means the child has **all** the wanted passives; extras are tolerated.
-- A pair of species always produces the same child, so **passive inheritance is the only
-  per-egg uncertainty**. Where a step costs more than its passive odds alone, that is the
-  separate cost of getting its two parents to be opposite sexes — a bred parent having to
+- A pair of species always produces the same child. Per-egg uncertainty comes from passive
+  and IV inheritance. Where a step costs more than those odds alone, that is the separate
+  cost of getting its two parents to be opposite sexes — a bred parent having to
   come out a particular sex at that species' gender ratio, or two bred parents having to
   land opposite each other. The two are reported separately rather than multiplied into one
   "per hatch" figure, which would read as though the egg might hatch the wrong species.
@@ -213,9 +213,9 @@ with reverse parent-pair lookup, and both front-ends.
 
 Not yet implemented: mutation routes, Cake selection and resource costs, active-skill
 inheritance as a search constraint, incubation-time optimisation, and shareable plan links.
-IV thresholds currently act as a filter and a final-step probability report rather than a
-dimension of the search itself. Hand-built routes are not checked for whether you own
-enough copies of a Pal to run two branches at once.
+IV thresholds are carried through the search. Every bred intermediate must meet the requested
+floors, and its IV rerolls are included in the expected egg cost. Hand-built routes are not
+checked for whether you own enough copies of a Pal to run two branches at once.
 
 ## Layout
 

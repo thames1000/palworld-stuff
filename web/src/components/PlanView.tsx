@@ -79,8 +79,22 @@ function ParentSlot({ label, parent }: { label: string; parent: PlanStepRef }) {
   );
 }
 
-export function StepCard({ step, required }: { step: PlanStep; required: string[] }) {
+export function StepCard({
+  step,
+  required,
+  minIvs,
+}: {
+  step: PlanStep;
+  required: string[];
+  minIvs?: TargetSpec['minIvs'];
+}) {
   const keep = maskedPassives(step.mask, required);
+  const floors = minIvs ?? { hp: null, attack: null, defense: null };
+  const ivKeep = [
+    floors.hp != null && floors.hp > 0 ? `HP ≥ ${floors.hp}` : null,
+    floors.attack != null && floors.attack > 0 ? `Attack ≥ ${floors.attack}` : null,
+    floors.defense != null && floors.defense > 0 ? `Defense ≥ ${floors.defense}` : null,
+  ].filter((value): value is string => value != null);
   const odds = stepOdds({
     passiveSuccess: step.passiveSuccess,
     genderFactor: step.genderFactor,
@@ -96,6 +110,9 @@ export function StepCard({ step, required }: { step: PlanStep; required: string[
         </span>
         <span className="nums text-[11px] text-ink-2">
           ~{step.expectedEggs.toFixed(1)} eggs · {odds.hatch}
+          {ivKeep.length > 0 && step.ivSuccess != null
+            ? ` · ${(step.ivSuccess * 100).toFixed(1)}% IVs`
+            : ''}
         </span>
       </div>
       <div className="grid gap-3 p-3 md:grid-cols-[1fr_auto_1fr]">
@@ -119,6 +136,11 @@ export function StepCard({ step, required }: { step: PlanStep; required: string[
           )}
         </div>
         {odds.gender && <p className="mt-1 text-[11px] text-ink-2">Note: {odds.gender}.</p>}
+        {ivKeep.length > 0 && (
+          <p className="mt-1 text-[11px] text-ink-1">
+            Keep only if its IVs are <span className="nums text-ink-0">{ivKeep.join(', ')}</span>.
+          </p>
+        )}
         {step.expectedUnwanted >= 0.5 && (
           <p className="mt-1 text-[11px] text-ink-2">
             Expect ~{step.expectedUnwanted.toFixed(1)} unwanted passive(s) to tag along.
@@ -191,7 +213,12 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
       {summary.steps.length > 0 && (
         <ol className="space-y-3">
           {summary.steps.map((step) => (
-            <StepCard key={step.index} step={step} required={solvedSpec.requiredPassives} />
+            <StepCard
+              key={step.index}
+              step={step}
+              required={solvedSpec.requiredPassives}
+              minIvs={solvedSpec.minIvs}
+            />
           ))}
         </ol>
       )}
@@ -232,7 +259,7 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
                 <span className="nums text-ink-0">
                   {(summary.finalIvProbability * 100).toFixed(1)}%
                 </span>{' '}
-                per hatch. This estimate did not affect route selection.
+                per hatch. This chance is included in the final step's expected eggs.
               </li>
             )}
             {solvedSpec.gender && (

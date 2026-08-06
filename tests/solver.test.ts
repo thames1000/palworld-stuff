@@ -7,6 +7,7 @@ import {
   speciesName,
 } from '../src/core/data/index.js';
 import { renderPlanMermaid, renderPlanMermaidModel } from '../src/core/solver/diagram.js';
+import { breedingResult, parentPairsFor } from '../src/core/data/breeding.js';
 import { solve } from '../src/core/solver/search.js';
 import { flattenPlan, type PlanStep } from '../src/core/solver/steps.js';
 import {
@@ -474,6 +475,68 @@ describe('solver', () => {
       // Acceptable outcome, but it must be explained rather than silently empty.
       expect(result.diagnostics.length).toBeGreaterThan(0);
     }
+  });
+
+  it('reports IV odds when the final parent is itself bred', () => {
+    const intermediate = findSpecies('Relaxaurus Lux');
+    const finalMate = findSpecies('Jormuntide Ignis');
+    const target = findSpecies('Anubis');
+    const firstPair = parentPairsFor(intermediate).find(
+      ([a, b]) =>
+        a !== intermediate &&
+        b !== intermediate &&
+        a !== finalMate &&
+        b !== finalMate &&
+        a !== b &&
+        breedingResult(a, finalMate) !== target &&
+        breedingResult(b, finalMate) !== target,
+    );
+    expect(firstPair).toBeDefined();
+    const [firstA, firstB] = firstPair!;
+    const pals = [
+      makePal(speciesName(firstA), 'Unknown', [], [100, 100, 20]),
+      makePal(speciesName(firstB), 'Unknown', [], [20, 100, 100]),
+      makePal(speciesName(finalMate), 'Unknown', [], [100, 20, 100]),
+    ];
+    const result = solve(
+      pals,
+      spec({
+        requiredPassives: [],
+        minIvs: { hp: 90, attack: 90, defense: 90 },
+        maxGenerations: 6,
+      }),
+    );
+    expect(result.plan).not.toBeNull();
+    expect(result.plan!.generation).toBeGreaterThan(1);
+    expect(result.finalIvProbability).not.toBeNull();
+    expect(result.finalIvProbability!).toBeGreaterThan(0);
+    expect(result.diagnostics.join(' ')).not.toContain('No final IV odds');
+    const steps = flattenPlan(result.plan!);
+    expect(steps.every((step) => step.ivSuccess != null && step.ivSuccess > 0)).toBe(true);
+    expect(
+      steps.every(
+        (step) =>
+          step.expectedEggs >=
+          1 / (step.passiveSuccess * step.genderFactor * (step.ivSuccess ?? 1)),
+      ),
+    ).toBe(true);
+  });
+
+  it('retains the more IV-viable Pal for the same species and passive state', () => {
+    const low = makePal('Relaxaurus Lux', 'Male', [], [10, 10, 10]);
+    const high = makePal('Relaxaurus Lux', 'Male', [], [100, 100, 100]);
+    const mate = makePal('Jormuntide Ignis', 'Female', [], [100, 100, 100]);
+    const result = solve(
+      [low, high, mate],
+      spec({ requiredPassives: [], minIvs: { hp: 90, attack: 90, defense: 90 } }),
+    );
+    expect(result.plan).not.toBeNull();
+    const ownedIds = flattenPlan(result.plan!)
+      .flatMap((step) => step.parents)
+      .flatMap((parent) => (parent.kind === 'owned' ? [parent.pal.instanceId] : []));
+    expect(ownedIds).toContain(high.instanceId);
+    expect(ownedIds).not.toContain(low.instanceId);
+    expect(result.finalIvProbability).toBeGreaterThan(0);
   });
 
   it('reports no-pals rather than crashing on an empty Palbox', () => {

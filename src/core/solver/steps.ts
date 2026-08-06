@@ -26,10 +26,12 @@ export interface PlanStep {
   /**
    * Chance a hatch carries every passive this step wants.
    *
-   * The child's species is fixed by the pairing, so this is the only thing that is actually
-   * uncertain about an individual egg -- 1 when nothing is riding on the passives.
+   * The child's species is fixed by the pairing. IV success is tracked separately; this is
+   * 1 when nothing is riding on the passives.
    */
   passiveSuccess: number;
+  /** Chance a hatch meets every IV floor requested for the route. */
+  ivSuccess?: number;
   /**
    * What it costs to get this step's parents to opposite sexes, and why.
    *
@@ -82,6 +84,7 @@ export function flattenPlan(plan: PlanNode): PlanStep[] {
     parents,
     expectedEggs: node.stepEggs,
     passiveSuccess: node.passiveSuccess,
+    ivSuccess: node.ivStepSuccess,
     genderFactor: node.genderFactor,
     genderRequirement: node.genderRequirement,
     expectedUnwanted: node.expectedUnwanted,

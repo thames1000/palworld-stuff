@@ -15,15 +15,19 @@
  *    In practice you re-roll until you get a reasonably clean child, so this is the
  *    optimistic end of the range; `expectedUnwanted` reports the risk separately.
  *  - Success at a step means the child has all the wanted passives; extras are tolerated.
+ *  - When IV floors are requested, every bred intermediate must meet them. Passive and IV
+ *    inheritance are treated as independent when their probabilities are combined.
  */
 import { MECHANICS, SPECIES } from '../data/index.js';
 import { breedingResult, isReachable, minBreedingSteps } from '../data/breeding.js';
 import type { Pal } from '../save/types.js';
 import { breedingStep, leavesCanBreed } from './pairing.js';
 import {
+  childIvDistribution,
   expectedUnwantedPassives,
   genderProbability,
-  ivProbability,
+  ivSuccessProbability,
+  knownIvDistribution,
   popcount,
 } from './probability.js';
 import type { OptimizationMode, PlanNode, SolveResult, TargetSpec } from './types.js';
@@ -40,18 +44,25 @@ function thresholdVector(spec: TargetSpec): (number | null)[] {
 }
 
 /** Lower is better. Ties are broken so plans stay stable between runs. */
-function cost(node: PlanNode, mode: OptimizationMode): number {
+function cost(node: PlanNode, mode: OptimizationMode, thresholds: readonly (number | null)[]): number {
+  const ivSuccess = node.ivDistribution
+    ? ivSuccessProbability(node.ivDistribution, thresholds)
+    : 1;
+  // IV targets now influence which route survives for a species/passive state. Step 4 will
+  // turn this probability into explicit per-step keep rules and egg costs; for now a
+  // logarithmic penalty avoids allowing a tiny probability to swamp the primary mode.
+  const ivPenalty = -Math.log(Math.max(ivSuccess, 1e-12)) * 20;
   switch (mode) {
     case 'generations':
-      return node.generation * 1e6 + node.totalEggs;
+      return node.generation * 1e6 + node.totalEggs + ivPenalty;
     case 'eggs':
-      return node.totalEggs;
+      return node.totalEggs + ivPenalty;
     case 'clean':
-      return node.expectedUnwanted * 1e4 + node.totalEggs;
+      return node.expectedUnwanted * 1e4 + node.totalEggs + ivPenalty;
     case 'balanced':
       // Generations dominate, but a route that needs hundreds of eggs should lose to a
       // slightly longer one that needs a dozen.
-      return node.generation * 50 + Math.log1p(node.totalEggs) * 10 + node.expectedUnwanted * 5;
+      return node.generation * 50 + Math.log1p(node.totalEggs) * 10 + node.expectedUnwanted * 5 + ivPenalty;
   }
 }
 
@@ -164,7 +175,9 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
   const consider = (node: PlanNode): void => {
     const key = stateKey(node.speciesIndex, node.mask, maskCount);
     const current = best.get(key);
-    if (!current || cost(node, spec.mode) < cost(current, spec.mode)) best.set(key, node);
+    if (!current || cost(node, spec.mode, thresholds) < cost(current, spec.mode, thresholds)) {
+      best.set(key, node);
+    }
   };
 
   for (const pal of candidates) {
@@ -184,6 +197,8 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
       genderRequirement: null,
       totalEggs: 0,
       expectedUnwanted: pal.passives.length - popcount(mask),
+      ivDistribution: knownIvDistribution(ivVector(pal), thresholds),
+      ivStepSuccess: 1,
       source: pal,
       parents: null,
       requiredGender: null,
@@ -204,7 +219,7 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
         // Prefer nodes carrying more of the wanted passives, then cheaper ones.
         const byMask = popcount(b.mask) - popcount(a.mask);
         if (byMask !== 0) return byMask;
-        return cost(a, spec.mode) - cost(b, spec.mode);
+        return cost(a, spec.mode, thresholds) - cost(b, spec.mode, thresholds);
       })
       .slice(0, Math.min(spec.beamSize, MAX_NODES_PER_ROUND));
 
@@ -236,17 +251,33 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
         const step = breedingStep(a, b, childMask);
         if (step.successPerEgg <= 0) continue;
 
+        const inheritedIvs = childIvDistribution(a.ivDistribution!, b.ivDistribution!, thresholds);
+        const ivStepSuccess = wantsIvs ? ivSuccessProbability(inheritedIvs, thresholds) : 1;
+        if (ivStepSuccess <= 0) continue;
+        // A bred intermediate is retained only when it meets every requested floor. Once
+        // selected, its threshold state is known for the next step even though its exact IVs
+        // above those floors are not.
+        const keptIvs = wantsIvs
+          ? knownIvDistribution(
+              thresholds.map((threshold) => threshold ?? 0),
+              thresholds,
+            )
+          : inheritedIvs;
+        const stepEggs = step.stepEggs / ivStepSuccess;
+
         const child: PlanNode = {
           speciesIndex: childSpecies,
           mask: childMask,
           generation: Math.max(a.generation, b.generation) + 1,
           poolSize: Math.max(1, desiredCount),
-          stepEggs: step.stepEggs,
+          stepEggs,
           passiveSuccess: step.passiveSuccess,
           genderFactor: step.genderFactor,
           genderRequirement: step.genderRequirement,
-          totalEggs: a.totalEggs + b.totalEggs + step.stepEggs,
+          totalEggs: a.totalEggs + b.totalEggs + stepEggs,
           expectedUnwanted: expectedUnwantedPassives(step.pool, desiredCount),
+          ivDistribution: keptIvs,
+          ivStepSuccess,
           source: null,
           parents: [a, b],
           requiredGender: null,
@@ -255,7 +286,7 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
 
         const key = stateKey(childSpecies, childMask, maskCount);
         const current = best.get(key);
-        if (!current || cost(child, spec.mode) < cost(current, spec.mode)) {
+        if (!current || cost(child, spec.mode, thresholds) < cost(current, spec.mode, thresholds)) {
           best.set(key, child);
           improved = true;
           searched++;
@@ -275,22 +306,18 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
     if (node) alternatives.push(node);
   }
   alternatives.sort(
-    (a, b) => popcount(b.mask) - popcount(a.mask) || cost(a, spec.mode) - cost(b, spec.mode),
+    (a, b) =>
+      popcount(b.mask) - popcount(a.mask) ||
+      cost(a, spec.mode, thresholds) - cost(b, spec.mode, thresholds),
   );
 
   let finalIvProbability: number | null = null;
-  if (plan?.parents && wantsIvs) {
-    const [pa, pb] = plan.parents;
-    // IVs only propagate from actual Pals; a bred parent's IVs are whatever you settle
-    // for, so this is only meaningful when both parents are owned.
-    if (pa.source && pb.source) {
-      finalIvProbability = ivProbability(ivVector(pa.source), ivVector(pb.source), thresholds);
-    }
+  if (plan && wantsIvs) {
+    finalIvProbability = plan.ivStepSuccess ?? null;
   }
-  if (wantsIvs && finalIvProbability === null) {
+  if (wantsIvs && plan && finalIvProbability === null) {
     diagnostics.push(
-      'No final IV odds are available because at least one final parent is bred. ' +
-        'The current solver does not use IV targets to choose this route.',
+      'No final IV odds are available for this route because its IV state could not be evaluated.',
     );
   }
 
