@@ -14,6 +14,7 @@ import { Explorer } from '../web/src/components/Explorer';
 import { PairPicker } from '../web/src/components/PairPicker';
 import { PalTable } from '../web/src/components/PalTable';
 import { PlanView } from '../web/src/components/PlanView';
+import { PlanBuilder } from '../web/src/components/PlanBuilder';
 import { PalDialog } from '../web/src/components/PalDialog';
 import { ClearAllDialog, RosterEditor } from '../web/src/components/RosterEditor';
 import { ImportDialog } from '../web/src/components/RosterTransfer';
@@ -107,6 +108,20 @@ function explorer(tree: ManualNode, pool: Pal[] = []) {
 }
 
 describe('web UI', () => {
+  it('describes IV inputs as estimates rather than route constraints', () => {
+    const html = renderToString(
+      <PlanBuilder
+        spec={spec}
+        onChange={() => {}}
+        onSolve={() => {}}
+        solving={false}
+        candidateCount={1}
+      />,
+    );
+    expect(html).toContain('Final IV odds estimate');
+    expect(html).toContain('do not affect route selection yet');
+  });
+
   it('renders the drop zone before a save is loaded', () => {
     const html = renderToString(<App />);
     expect(html).toContain('Drop your Palworld world folder here');

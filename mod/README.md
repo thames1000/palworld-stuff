@@ -43,6 +43,10 @@ The `enabled.txt` inside it is what UE4SS looks for. On 2.x you may also need to
 The UE4SS console lists every Pal as it exports, so you can check the result against the
 box on screen without opening the file.
 
+If the installed UE4SS build exposes reflected values only as `TrivialObject` memory
+references, the mod cannot read the roster. It reports `Export unavailable` and deliberately
+does not write a file; address strings are not valid species or roster data.
+
 ## What it reads
 
 Species, gender, passives, IVs and nickname — the fields a plan is built from. Alpha and
@@ -50,9 +54,10 @@ predator variants are recorded as their base species (`BOSS_Anubis` → `Anubis`
 what matters for breeding. IVs come from `Talent_HP`, `Talent_Shot` and `Talent_Defense`,
 the same mapping the save-file parser uses.
 
-Wild Pals loaded around you are skipped: they have no owner, and that is the whole
-ownership test. Your client is never sent another player's Palbox, so "has an owner at all"
-is enough to mean "yours", without having to locate your own player id first.
+Wild Pals loaded around you are skipped when UE4SS exposes their owner GUID. Some UE4SS
+builds expose GUIDs only as opaque memory references; on those builds the mod exports all
+loaded Pal candidates and prints a warning that nearby wild Pals may be included. Export
+immediately after opening the Palbox and check the reported count against the box.
 
 ## If it stops working
 

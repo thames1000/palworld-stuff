@@ -54,6 +54,58 @@ local function read(object, field)
   return value
 end
 
+local function saveParameter(param)
+  return read(param, 'SaveParameter')
+end
+
+--- Numeric struct members are plain Lua numbers in some UE4SS builds and TrivialObject
+--- wrappers in others. Unwrap the latter before comparing or formatting GUID components.
+local function toNumber(value)
+  if type(value) == 'number' then return value end
+  if value == nil then return nil end
+  local ok, inner = pcall(function() return value:get() end)
+  if ok and inner ~= value then
+    local converted, number = pcall(tonumber, inner)
+    if converted and number ~= nil then return number end
+  end
+  -- Some UE4SS builds expose struct scalars as opaque TrivialObject references. Their
+  -- address points at the scalar in game memory; UE4SS's guarded dereference helper is the
+  -- only public way to read it without writing anything.
+  if type(DerefToInt32) == 'function' then
+    local gotAddress, address = pcall(function() return value:GetAddress() end)
+    if gotAddress and type(address) == 'number' then
+      local dereferenced, number = pcall(DerefToInt32, address)
+      if dereferenced and type(number) == 'number' then return number end
+    end
+  end
+  return tonumber(toStr(value))
+end
+
+local function guidPart(object, field)
+  -- Keep each component to eight hex digits if UE exposes its uint32 as a signed integer.
+  return (toNumber(read(object, field)) or 0) % 0x100000000
+end
+
+local function guidString(value)
+  if value == nil then return '' end
+
+  -- FGuid itself still exposes ToString even on UE4SS builds that return its individual
+  -- uint32 fields as opaque TrivialObject references. Prefer that public representation.
+  local text = toStr(value)
+  local compact = text:gsub('[{}%-]', '')
+  if #compact == 32 and compact:match('^%x+$') then
+    compact = compact:upper()
+    if compact ~= string.rep('0', 32) then return compact end
+    return ''
+  end
+
+  -- Older builds expose A-D as ordinary numbers, so retain that path as a fallback.
+  local a, b, c, d = guidPart(value, 'A'), guidPart(value, 'B'),
+                     guidPart(value, 'C'), guidPart(value, 'D')
+  if a == 0 and b == 0 and c == 0 and d == 0 then return '' end
+  return string.format('%08X%08X%08X%08X', a, b, c, d)
+end
+
 local JSON_ESCAPES = { ['"'] = '\\"', ['\\'] = '\\\\', ['\b'] = '\\b', ['\f'] = '\\f',
                        ['\n'] = '\\n', ['\r'] = '\\r', ['\t'] = '\\t' }
 
@@ -67,7 +119,7 @@ end
 -- --- reading one Pal --------------------------------------------------------------
 
 local function readSpecies(param)
-  local id = toStr(read(param, 'CharacterID'))
+  local id = toStr(read(saveParameter(param), 'CharacterID'))
   if id == '' then return '', '' end
   local species = id
   for _, prefix in ipairs(VARIANT_PREFIXES) do
@@ -79,7 +131,7 @@ local function readSpecies(param)
 end
 
 local function readGender(param)
-  local raw = read(param, 'Gender')
+  local raw = read(saveParameter(param), 'Gender')
   if raw == nil then return 'Unknown' end
   local text = stripEnumPrefix(toStr(raw)):lower()
   -- Female first: it contains "male", so the looser test has to lose.
@@ -90,7 +142,7 @@ end
 
 local function readPassives(param)
   local passives = {}
-  local list = read(param, 'PassiveSkillList')
+  local list = read(saveParameter(param), 'PassiveSkillList')
   if list == nil then return passives end
   pcall(function()
     list:ForEach(function(_, element)
@@ -105,25 +157,34 @@ end
 
 local function readIvs(param)
   local ivs = {}
+  local saved = saveParameter(param)
   for key, field in pairs(IV_FIELDS) do
-    ivs[key] = tonumber(toStr(read(param, field))) or 0
+    ivs[key] = tonumber(toStr(read(saved, field))) or 0
   end
   return ivs
 end
 
+local function readNickname(param)
+  return toStr(read(saveParameter(param), 'NickName'))
+end
+
 --- The owning player's id, or "" for a wild Pal.
 ---
---- This is the whole ownership filter. Your client holds parameters for wild Pals rendered
---- around you as well as your own, and telling them apart by *your* player id would mean
---- finding it first -- one more version-specific lookup to get wrong. A wild Pal simply has
---- no owner, and another player's Palbox is never replicated to you, so "has an owner at
---- all" is both simpler and sufficient.
+--- This is the ownership filter when UE4SS makes the GUID value readable. A compatibility
+--- fallback below handles builds that expose only an opaque reference to that value.
 local function ownerId(param)
-  local uid = read(param, 'OwnerPlayerUId')
-  if uid == nil then return '' end
-  local a, b, c, d = read(uid, 'A') or 0, read(uid, 'B') or 0, read(uid, 'C') or 0, read(uid, 'D') or 0
-  if a == 0 and b == 0 and c == 0 and d == 0 then return '' end
-  return string.format('%08X%08X%08X%08X', a, b, c, d)
+  local value = read(saveParameter(param), 'OwnerPlayerUId')
+  local id = guidString(value)
+  if id ~= '' then return id, false end
+
+  -- Certain UE4SS builds expose every FGuid only as an opaque TrivialObject and do not
+  -- provide the memory dereference helper. The address proves the property exists but not
+  -- whether its value is zero. Accept the loaded candidate in that compatibility mode and
+  -- make the reduced certainty explicit in the export summary.
+  if toStr(value):match('^TrivialObject:') and type(DerefToInt32) ~= 'function' then
+    return '<owner unavailable>', true
+  end
+  return '', false
 end
 
 --- Identity, so a Pal held by more than one live object is not exported twice.
@@ -132,16 +193,15 @@ local function instanceKey(param, species, owner)
   if individual ~= nil then
     local instance = read(individual, 'InstanceId')
     if instance ~= nil then
-      local a, b, c, d = read(instance, 'A') or 0, read(instance, 'B') or 0,
-                         read(instance, 'C') or 0, read(instance, 'D') or 0
-      if a ~= 0 or b ~= 0 or c ~= 0 or d ~= 0 then
-        return string.format('%08X%08X%08X%08X', a, b, c, d)
-      end
+      local id = guidString(instance)
+      if id ~= '' then return id end
+      local opaque = toStr(instance)
+      if opaque:match('^TrivialObject:') then return opaque end
     end
   end
   -- No usable instance id: fall back to something stable enough to spot a duplicate.
-  return table.concat({ species, owner, toStr(read(param, 'NickName')),
-                        toStr(read(param, 'Level')) }, '|')
+  return table.concat({ species, owner, readNickname(param),
+                        toStr(read(saveParameter(param), 'Level')) }, '|')
 end
 
 -- --- export -----------------------------------------------------------------------
@@ -167,16 +227,22 @@ local function exportRoster()
     return
   end
 
-  local pals, seen, owners, wild = {}, {}, {}, 0
+  local pals, seen, owners, wild, opaqueOwners, opaqueSpecies, ownerSample =
+    {}, {}, {}, 0, 0, 0, nil
 
   for _, param in ipairs(params) do
     local species, rawId = readSpecies(param)
+    if rawId:match('^TrivialObject:') then opaqueSpecies = opaqueSpecies + 1 end
     -- Humans share this parameter type; they are not breedable and not wanted here.
-    if species ~= '' and not rawId:find('Player') then
-      local owner = ownerId(param)
+    if species ~= '' and not rawId:match('^TrivialObject:') and not rawId:find('Player') then
+      local owner, ownerOpaque = ownerId(param)
       if owner == '' then
+        if ownerSample == nil then
+          ownerSample = toStr(read(saveParameter(param), 'OwnerPlayerUId'))
+        end
         wild = wild + 1
       else
+        if ownerOpaque then opaqueOwners = opaqueOwners + 1 end
         local key = instanceKey(param, species, owner)
         if not seen[key] then
           seen[key] = true
@@ -186,17 +252,28 @@ local function exportRoster()
             gender = readGender(param),
             passives = readPassives(param),
             ivs = readIvs(param),
-            nickname = toStr(read(param, 'NickName')),
+            nickname = readNickname(param),
           }
         end
       end
     end
   end
 
+  if opaqueSpecies > 0 then
+    print(string.format(
+      '[PalForge] Export unavailable: UE4SS returned opaque values for CharacterID on %d/%d objects.\n',
+      opaqueSpecies, #params))
+    print('[PalForge] This UE4SS build cannot expose species, gender, passives or IVs; no roster was written.\n')
+    return
+  end
+
   if #pals == 0 then
     print(string.format(
       '[PalForge] Saw %d Pal objects but none owned by a player (%d wild). Open your Palbox, then retry.\n',
       #params, wild))
+    print('[PalForge] OwnerPlayerUId sample: ' .. tostring(ownerSample) .. '\n')
+    print('[PalForge] DerefToInt32 available: ' ..
+          tostring(type(DerefToInt32) == 'function') .. '\n')
     return
   end
 
@@ -217,6 +294,11 @@ local function exportRoster()
   -- file. A wrong gender mapping is obvious here and nowhere else.
   print(string.format('[PalForge] Wrote %d Pals to %s (%d wild ignored)\n',
                       #pals, OUTPUT_FILE, wild))
+  if opaqueOwners > 0 then
+    print(string.format(
+      '[PalForge] Warning: ownership GUIDs were opaque; exported %d loaded candidates. Nearby wild Pals may be included.\n',
+      opaqueOwners))
+  end
   for _, pal in ipairs(pals) do
     print(string.format('[PalForge]   %s %s %s\n', pal.species, pal.gender,
                         #pal.passives > 0 and table.concat(pal.passives, ', ') or '-'))
@@ -236,4 +318,4 @@ RegisterKeyBind(HOTKEY, function()
   end
 end)
 
-print('[PalForge] Palbox export loaded. Open your Palbox, then press F8.\n')
+print('[PalForge] Palbox export loaded (property-only build). Open your Palbox, then press F8.\n')

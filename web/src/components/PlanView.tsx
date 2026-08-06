@@ -228,11 +228,11 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
           <ul className="space-y-1.5 text-xs text-ink-1">
             {summary.finalIvProbability != null && (
               <li>
-                IV thresholds on the final step:{' '}
+                Chance the final hatch meets the requested IVs:{' '}
                 <span className="nums text-ink-0">
                   {(summary.finalIvProbability * 100).toFixed(1)}%
                 </span>{' '}
-                per hatch.
+                per hatch. This estimate did not affect route selection.
               </li>
             )}
             {solvedSpec.gender && (

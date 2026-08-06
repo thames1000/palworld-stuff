@@ -289,8 +289,8 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
   }
   if (wantsIvs && finalIvProbability === null) {
     diagnostics.push(
-      'IV thresholds could not be evaluated for the final step because at least one parent is itself bred. ' +
-        'Treat the IV target as uncertain and check ancestors as you go.',
+      'No final IV odds are available because at least one final parent is bred. ' +
+        'The current solver does not use IV targets to choose this route.',
     );
   }
 

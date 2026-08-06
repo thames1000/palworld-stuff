@@ -39,8 +39,9 @@ export function PlanBuilder({
         placeholder="any"
         onChange={(e) => {
           const raw = e.target.value.trim();
-          const parsed = raw === '' ? null : Math.max(0, Math.min(100, Number(raw)));
-          onChange({ ...spec, minIvs: { ...spec.minIvs, [key]: parsed || null } });
+          const number = Number(raw);
+          const parsed = raw === '' || !Number.isFinite(number) ? null : Math.max(0, Math.min(100, number));
+          onChange({ ...spec, minIvs: { ...spec.minIvs, [key]: parsed } });
         }}
       />
     </Field>
@@ -79,10 +80,18 @@ export function PlanBuilder({
           />
         </Field>
 
-        <div className="grid grid-cols-3 gap-2">
-          {ivField('hp', 'Min HP IV')}
-          {ivField('attack', 'Min Atk IV')}
-          {ivField('defense', 'Min Def IV')}
+        <div className="rounded-md border border-edge/60 bg-surface-2/40 p-3">
+          <div className="text-xs font-medium text-ink-1">Final IV odds estimate</div>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-ink-2">
+            Used to identify a matching Pal you already own. For a breeding plan, odds can
+            currently be calculated only when both final parents are Pals you own; these values
+            do not affect route selection yet.
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {ivField('hp', 'HP IV')}
+            {ivField('attack', 'Atk IV')}
+            {ivField('defense', 'Def IV')}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
