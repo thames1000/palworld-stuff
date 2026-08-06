@@ -24,10 +24,9 @@ local IV_FIELDS = { hp = 'Talent_HP', attack = 'Talent_Shot', defense = 'Talent_
 -- Anubis is still an Anubis for breeding, and PalForge's dataset is keyed on the bare name.
 local VARIANT_PREFIXES = { 'BOSS_', 'PREDATOR_', 'SUMMON_' }
 
--- Gender reads as an EPalGenderType. Newer UE4SS hands back the enum name, older builds
--- hand back the raw integer, so both are handled; these are the fallback for the integer
--- case. If every Pal comes out the wrong sex, swap these two -- nothing else needs changing.
-local GENDER_BY_VALUE = { [0] = 'Male', [1] = 'Female' }
+-- Gender reads as an EPalGenderType. Newer UE4SS hands back the enum name, while the
+-- Palworld-compatible build returns the current raw values: None=0, Female=1, Male=2.
+local GENDER_BY_VALUE = { [1] = 'Female', [2] = 'Male' }
 
 -- --- small helpers ----------------------------------------------------------------
 

@@ -66,9 +66,9 @@ written to fail loudly rather than silently: each field is read through a guard,
 rename costs you that one field rather than the whole export.
 
 The likely thing to adjust is at the top of `Scripts/main.lua` — `IV_FIELDS`,
-`VARIANT_PREFIXES` and `GENDER_BY_VALUE` are constants for exactly this reason. If every
-Pal exports with the wrong sex, swap the two values in `GENDER_BY_VALUE`; that means the
-build is handing back raw enum integers rather than names, and nothing else needs changing.
+`VARIANT_PREFIXES` and `GENDER_BY_VALUE` are constants for exactly this reason. The gender
+fallback matches the current raw values (`None=0`, `Female=1`, `Male=2`) while still accepting
+named enum values when UE4SS provides them.
 
 ## Status
 
