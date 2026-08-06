@@ -75,9 +75,11 @@ export function childIvDistribution(
 
   const out = emptyIvDistribution();
   for (let maskA = 0; maskA < 8; maskA++) {
-    if (parentA[maskA] === 0) continue;
+    const weightA = parentA[maskA] ?? 0;
+    if (weightA === 0) continue;
     for (let maskB = 0; maskB < 8; maskB++) {
-      const parentWeight = parentA[maskA] * parentB[maskB];
+      const weightB = parentB[maskB] ?? 0;
+      const parentWeight = weightA * weightB;
       if (parentWeight === 0) continue;
 
       for (const [inheritedCount, countWeight] of P_IV_INHERIT_COUNT) {
@@ -107,7 +109,8 @@ export function childIvDistribution(
               const passes = (childMask & (1 << stat)) !== 0;
               probability *= passes ? passChance[stat]! : 1 - passChance[stat]!;
             }
-            out[childMask] += (parentWeight * countWeight * probability) / subsets;
+            out[childMask] =
+              (out[childMask] ?? 0) + (parentWeight * countWeight * probability) / subsets;
           }
         }
       }

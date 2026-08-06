@@ -1,9 +1,9 @@
 --[[
-  PalForge Palbox export.
+  PalForge Palbox and dimensional storage export.
 
-  Reads the Pals your client already holds in memory and writes them out as a PalForge
-  roster file, so a player with no access to Level.sav can still plan from their real
-  Palbox instead of typing it back in by hand.
+  Reads the Pals your client already holds in memory and writes them out as a cumulative
+  PalForge roster file, so a player with no access to Level.sav can still plan from their
+  real storage instead of typing it back in by hand.
 
   Read-only by construction. It looks up objects, formats text, and writes one JSON file.
   It never sets a property, calls a gameplay function, or talks to the server -- there is
@@ -15,6 +15,7 @@
 
 local OUTPUT_FILE = 'PalForgeRoster.json'
 local HOTKEY = Key.F8
+local CLEAR_HOTKEY = Key.F9
 
 -- Palworld stores IVs under names that do not match what the UI calls them. This is the
 -- same mapping the save-file parser uses, and the two must not drift apart.
@@ -27,6 +28,23 @@ local VARIANT_PREFIXES = { 'BOSS_', 'PREDATOR_', 'SUMMON_' }
 -- Gender reads as an EPalGenderType. Newer UE4SS hands back the enum name, while the
 -- Palworld-compatible build returns the current raw values: None=0, Female=1, Male=2.
 local GENDER_BY_VALUE = { [1] = 'Female', [2] = 'Male' }
+
+local function newSession()
+  return {
+    pals = {},
+    seen = {},
+    owners = {},
+    scanCount = 0,
+    opaqueOwners = 0,
+    fallbackKeys = 0,
+  }
+end
+
+local SESSION = newSession()
+
+local function resetSession()
+  SESSION = newSession()
+end
 
 -- --- small helpers ----------------------------------------------------------------
 
@@ -158,7 +176,7 @@ local function readIvs(param)
   local ivs = {}
   local saved = saveParameter(param)
   for key, field in pairs(IV_FIELDS) do
-    ivs[key] = tonumber(toStr(read(saved, field))) or 0
+    ivs[key] = toNumber(read(saved, field)) or 0
   end
   return ivs
 end
@@ -187,20 +205,29 @@ local function ownerId(param)
 end
 
 --- Identity, so a Pal held by more than one live object is not exported twice.
-local function instanceKey(param, species, owner)
+local function instanceKey(param, pal, owner)
   local individual = read(param, 'IndividualId')
   if individual ~= nil then
     local instance = read(individual, 'InstanceId')
     if instance ~= nil then
       local id = guidString(instance)
-      if id ~= '' then return id end
+      if id ~= '' then return id, true end
       local opaque = toStr(instance)
-      if opaque:match('^TrivialObject:') then return opaque end
+      if opaque:match('^TrivialObject:') then return 'opaque-instance|' .. opaque, false end
     end
   end
   -- No usable instance id: fall back to something stable enough to spot a duplicate.
-  return table.concat({ species, owner, readNickname(param),
-                        toStr(read(saveParameter(param), 'Level')) }, '|')
+  return table.concat({
+    pal.species,
+    owner,
+    pal.gender,
+    pal.nickname,
+    table.concat(pal.passives, '+'),
+    tostring(pal.ivs.hp),
+    tostring(pal.ivs.attack),
+    tostring(pal.ivs.defense),
+    toStr(read(saveParameter(param), 'Level')),
+  }, '|'), false
 end
 
 -- --- export -----------------------------------------------------------------------
@@ -219,92 +246,154 @@ local function palToJson(pal)
   })
 end
 
-local function exportRoster()
+local function scanLoadedPals()
   local params = FindAllOf('PalIndividualCharacterParameter')
-  if params == nil or #params == 0 then
-    print('[PalForge] Found no Pal data. Open your Palbox once, then press the key again.\n')
-    return
-  end
+  local stats = {
+    loaded = params ~= nil and #params or 0,
+    added = 0,
+    duplicates = 0,
+    wild = 0,
+    opaqueOwners = 0,
+    opaqueSpecies = 0,
+    fallbackKeys = 0,
+    ownerSample = nil,
+    addedPals = {},
+    newRecords = {},
+    newSeen = {},
+  }
 
-  local pals, seen, owners, wild, opaqueOwners, opaqueSpecies, ownerSample =
-    {}, {}, {}, 0, 0, 0, nil
+  if params == nil or #params == 0 then return stats end
 
   for _, param in ipairs(params) do
     local species, rawId = readSpecies(param)
-    if rawId:match('^TrivialObject:') then opaqueSpecies = opaqueSpecies + 1 end
+    if rawId:match('^TrivialObject:') then stats.opaqueSpecies = stats.opaqueSpecies + 1 end
     -- Humans share this parameter type; they are not breedable and not wanted here.
     if species ~= '' and not rawId:match('^TrivialObject:') and not rawId:find('Player') then
       local owner, ownerOpaque = ownerId(param)
       if owner == '' then
-        if ownerSample == nil then
-          ownerSample = toStr(read(saveParameter(param), 'OwnerPlayerUId'))
+        if stats.ownerSample == nil then
+          stats.ownerSample = toStr(read(saveParameter(param), 'OwnerPlayerUId'))
         end
-        wild = wild + 1
+        stats.wild = stats.wild + 1
       else
-        if ownerOpaque then opaqueOwners = opaqueOwners + 1 end
-        local key = instanceKey(param, species, owner)
-        if not seen[key] then
-          seen[key] = true
-          owners[owner] = (owners[owner] or 0) + 1
-          pals[#pals + 1] = {
-            species = species,
-            gender = readGender(param),
-            passives = readPassives(param),
-            ivs = readIvs(param),
-            nickname = readNickname(param),
+        if ownerOpaque then stats.opaqueOwners = stats.opaqueOwners + 1 end
+        local pal = {
+          species = species,
+          gender = readGender(param),
+          passives = readPassives(param),
+          ivs = readIvs(param),
+          nickname = readNickname(param),
+        }
+        local key, reliableKey = instanceKey(param, pal, owner)
+        if not SESSION.seen[key] and not stats.newSeen[key] then
+          stats.newSeen[key] = true
+          stats.added = stats.added + 1
+          stats.addedPals[#stats.addedPals + 1] = pal
+          stats.newRecords[#stats.newRecords + 1] = {
+            key = key,
+            owner = owner,
+            pal = pal,
+            ownerOpaque = ownerOpaque,
+            reliableKey = reliableKey,
           }
+          if not reliableKey then stats.fallbackKeys = stats.fallbackKeys + 1 end
+        else
+          stats.duplicates = stats.duplicates + 1
         end
       end
     end
   end
+  return stats
+end
 
-  if opaqueSpecies > 0 then
+local function commitScan(stats)
+  for _, record in ipairs(stats.newRecords) do
+    SESSION.seen[record.key] = true
+    SESSION.owners[record.owner] = (SESSION.owners[record.owner] or 0) + 1
+    SESSION.pals[#SESSION.pals + 1] = record.pal
+    if record.ownerOpaque then SESSION.opaqueOwners = SESSION.opaqueOwners + 1 end
+    if not record.reliableKey then SESSION.fallbackKeys = SESSION.fallbackKeys + 1 end
+  end
+  SESSION.scanCount = SESSION.scanCount + 1
+end
+
+local function writeRoster()
+  local entries = {}
+  for i, pal in ipairs(SESSION.pals) do entries[i] = palToJson(pal) end
+
+  local file, err = io.open(OUTPUT_FILE, 'w')
+  if not file then
+    print('[PalForge] Could not write ' .. OUTPUT_FILE .. ': ' .. tostring(err) .. '\n')
+    return false
+  end
+  file:write('{\n  "format": "palforge-roster",\n  "version": 1,\n')
+  file:write('  "exportMode": "cumulative-loaded-pages",\n')
+  file:write('  "scans": ', SESSION.scanCount, ',\n')
+  file:write('  "pals": [\n')
+  file:write(table.concat(entries, ',\n'))
+  file:write('\n  ]\n}\n')
+  file:close()
+  return true
+end
+
+local function exportRoster()
+  local stats = scanLoadedPals()
+
+  if stats.loaded == 0 then
+    print('[PalForge] Found no Pal data. Open your Palbox or dimensional storage once, then press F8 again.\n')
+    return
+  end
+
+  if stats.opaqueSpecies > 0 then
     print(string.format(
       '[PalForge] Export unavailable: UE4SS returned opaque values for CharacterID on %d/%d objects.\n',
-      opaqueSpecies, #params))
+      stats.opaqueSpecies, stats.loaded))
     print('[PalForge] This UE4SS build cannot expose species, gender, passives or IVs; no roster was written.\n')
     return
   end
 
-  if #pals == 0 then
+  commitScan(stats)
+
+  if #SESSION.pals == 0 then
     print(string.format(
-      '[PalForge] Saw %d Pal objects but none owned by a player (%d wild). Open your Palbox, then retry.\n',
-      #params, wild))
-    print('[PalForge] OwnerPlayerUId sample: ' .. tostring(ownerSample) .. '\n')
+      '[PalForge] Saw %d Pal objects but none owned by a player (%d wild). Open your Palbox or dimensional storage, then retry.\n',
+      stats.loaded, stats.wild))
+    print('[PalForge] OwnerPlayerUId sample: ' .. tostring(stats.ownerSample) .. '\n')
     print('[PalForge] DerefToInt32 available: ' ..
           tostring(type(DerefToInt32) == 'function') .. '\n')
     return
   end
 
-  local entries = {}
-  for i, pal in ipairs(pals) do entries[i] = palToJson(pal) end
-
-  local file, err = io.open(OUTPUT_FILE, 'w')
-  if not file then
-    print('[PalForge] Could not write ' .. OUTPUT_FILE .. ': ' .. tostring(err) .. '\n')
-    return
-  end
-  file:write('{\n  "format": "palforge-roster",\n  "version": 1,\n  "pals": [\n')
-  file:write(table.concat(entries, ',\n'))
-  file:write('\n  ]\n}\n')
-  file:close()
+  if not writeRoster() then return end
 
   -- Echoed so the export can be checked against the Palbox on screen without opening the
   -- file. A wrong gender mapping is obvious here and nowhere else.
-  print(string.format('[PalForge] Wrote %d Pals to %s (%d wild ignored)\n',
-                      #pals, OUTPUT_FILE, wild))
-  if opaqueOwners > 0 then
+  print(string.format(
+    '[PalForge] Scan %d saw %d loaded Pal objects: %d new, %d already seen, %d wild ignored.\n',
+    SESSION.scanCount, stats.loaded, stats.added, stats.duplicates, stats.wild))
+  print(string.format('[PalForge] Wrote %d cumulative Pals to %s.\n',
+                      #SESSION.pals, OUTPUT_FILE))
+  if SESSION.opaqueOwners > 0 then
     print(string.format(
-      '[PalForge] Warning: ownership GUIDs were opaque; exported %d loaded candidates. Nearby wild Pals may be included.\n',
-      opaqueOwners))
+      '[PalForge] Warning: ownership GUIDs were opaque for %d exported candidates. Nearby wild Pals may be included.\n',
+      SESSION.opaqueOwners))
   end
-  for _, pal in ipairs(pals) do
-    print(string.format('[PalForge]   %s %s %s\n', pal.species, pal.gender,
+  if SESSION.fallbackKeys > 0 then
+    print(string.format(
+      '[PalForge] Note: %d exported Pals had no readable instance id; duplicate detection used fallback keys.\n',
+      SESSION.fallbackKeys))
+  end
+  if stats.added == 0 then
+    print('[PalForge] No new Pals were added from this loaded page.\n')
+  end
+  for _, pal in ipairs(stats.addedPals) do
+    print(string.format('[PalForge]   + %s %s %s\n', pal.species, pal.gender,
                         #pal.passives > 0 and table.concat(pal.passives, ', ') or '-'))
   end
+  print('[PalForge] Flip to the next Palbox or dimensional-storage page after it loads, then press F8 again. Press F9 to clear this session.\n')
 
   local distinct = 0
-  for _ in pairs(owners) do distinct = distinct + 1 end
+  for _ in pairs(SESSION.owners) do distinct = distinct + 1 end
   if distinct > 1 then
     print('[PalForge] Note: Pals from more than one owner were present; check the list.\n')
   end
@@ -317,4 +406,9 @@ RegisterKeyBind(HOTKEY, function()
   end
 end)
 
-print('[PalForge] Palbox export loaded (property-only build). Open your Palbox, then press F8.\n')
+RegisterKeyBind(CLEAR_HOTKEY, function()
+  resetSession()
+  print('[PalForge] Cleared the cumulative roster cache. Press F8 to scan the current loaded storage page.\n')
+end)
+
+print('[PalForge] Palbox export loaded (cumulative property-only build). Open your Palbox or dimensional storage, press F8 per loaded page, F9 to clear.\n')

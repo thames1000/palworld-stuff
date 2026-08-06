@@ -1,6 +1,7 @@
 # PalForge Palbox export
 
-A small client-side mod that writes your Palbox out as a PalForge roster file.
+A small client-side mod that writes your Palbox and dimensional storage out as a PalForge
+roster file.
 
 It exists for one situation: playing on a server you do not administer. Your Pals live in
 the server's `Level.sav`, and nothing the server exposes remotely carries the fields a
@@ -32,16 +33,29 @@ The `enabled.txt` inside it is what UE4SS looks for. On 2.x you may also need to
 ## Use
 
 1. Launch the game and join your world.
-2. **Open your Palbox.** This matters: the mod reads Pals the client has loaded, and until
-   you have opened the box its contents are not necessarily in memory. If the export comes
-   back with only the Pals in your party, this is why.
-3. Press **F8**.
-4. `PalForgeRoster.json` is written next to the game executable, in
+2. **Open your Palbox or dimensional storage.** This matters: the mod reads Pals the client
+   has loaded, and until a page has been shown to your client its contents are not
+   necessarily in memory. If the export comes back with only the Pals in your party, this
+   is why.
+3. Press **F9** if you want to clear the current export session and start fresh.
+4. Press **F8** after the current page loads.
+5. Flip to the next Palbox or dimensional-storage page, wait for it to load, then press
+   **F8** again. The file is cumulative, so every unique Pal seen by the current session is
+   kept.
+6. `PalForgeRoster.json` is written next to the game executable, in
    `Palworld/Pal/Binaries/Win64/`.
-5. In PalForge: **My Pals → Import**, choose that file.
+7. In PalForge: **My Pals → Import**, choose that file.
 
-The UE4SS console lists every Pal as it exports, so you can check the result against the
-box on screen without opening the file.
+The UE4SS console lists the new Pals added by each scan, the cumulative count written to
+the file, and how many loaded objects were duplicates or wild Pals. Re-scanning the same
+page is safe when readable instance ids are available. If UE4SS hides those ids, the mod
+prints a fallback-key warning and duplicate detection is best-effort.
+
+The current implementation intentionally works from client-loaded Pal objects only. It
+does not query the server's whole Palbox or dimensional storage in one call. That means the
+reliable workflow is to page through the storage UI once and press **F8** on each loaded
+page. If a future Palworld/UE4SS path exposes the full storage container directly, this can
+become a one-shot export, but the cumulative scan is the safe client-side route today.
 
 If the installed UE4SS build exposes reflected values only as `TrivialObject` memory
 references, the mod cannot read the roster. It reports `Export unavailable` and deliberately
@@ -72,12 +86,11 @@ named enum values when UE4SS provides them.
 
 ## Status
 
-The export logic and its output format are tested: the script has been run against stubbed
-UE4SS objects covering alpha prefixes, both gender representations, duplicate instances,
-wild Pals, the player character and JSON escaping, and its output imports through PalForge
-with no warnings.
+The roster format and import path are tested, and the original exporter behavior has been
+run against stubbed UE4SS objects covering alpha prefixes, both gender representations,
+duplicate instances, wild Pals, the player character and JSON escaping.
 
 What has **not** been verified is the binding to the live game — whether
-`PalIndividualCharacterParameter` and the field names above match your build of Palworld.
-That is the part to expect to adjust, and the console output is there to make it obvious
-when it needs it.
+`PalIndividualCharacterParameter`, the field names above and the dimensional-storage page
+objects match your build of Palworld. That is the part to expect to adjust, and the console
+output is there to make it obvious when it needs it.
