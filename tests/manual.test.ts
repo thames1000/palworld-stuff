@@ -230,6 +230,23 @@ describe('manual tree evaluation', () => {
     expect(plan.root.parents![1]!.status).toBe('open');
   });
 
+  it('evaluates deep hand-built trees beyond the old UI lookup cap', () => {
+    let tree = newManualNode('leaf-20', findSpecies('Lamball'));
+    for (let i = 19; i >= 0; i--) {
+      tree = {
+        id: `deep-${i}`,
+        speciesIndex: findSpecies('Lamball'),
+        have: null,
+        parents: [tree, newManualNode(`side-${i}`, findSpecies('Cattiva'))],
+      };
+    }
+
+    const plan = evaluateManualTree(tree, { requiredPassives: [] });
+
+    expect(plan.generations).toBe(20);
+    expect(plan.problems.every((problem) => !problem.message.includes('nested more than'))).toBe(true);
+  });
+
   it('reports required passives that nothing in the tree carries', () => {
     const tree = pairTree(
       'Anubis',

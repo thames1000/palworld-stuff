@@ -18,6 +18,7 @@ import { newManualNode, type ManualNode } from '@core/solver/manualTree';
 
 const ROSTER_KEY = 'palforge.roster.v1';
 const TREE_KEY = 'palforge.tree.v1';
+const MAX_TREE_DEPTH = 128;
 
 let idCounter = 0;
 
@@ -81,7 +82,7 @@ function parseRoster(raw: unknown): ManualPalSpec[] | null {
 }
 
 function parseTree(raw: unknown, depth = 0): ManualNode | null {
-  if (!raw || typeof raw !== 'object' || depth > 16) return null;
+  if (!raw || typeof raw !== 'object' || depth > MAX_TREE_DEPTH) return null;
   const n = raw as Record<string, unknown>;
   if (!isSpecies(n.speciesIndex)) return null;
   let parents: [ManualNode, ManualNode] | null = null;

@@ -126,6 +126,10 @@ describe('web UI', () => {
     expect(html).toContain('Vegetable Cake');
     expect(html).toContain('Extravagant Vegetable Cake');
     expect(html).toContain('Special Cake');
+    const generationControl = html.slice(html.indexOf('Max generations'), html.indexOf('Optimise for'));
+    expect(generationControl).toContain('type="number"');
+    expect(generationControl).toContain('min="1"');
+    expect(generationControl).not.toContain('<select');
   });
 
   it('shows IV-focused cake uplift in the target readiness panel', () => {
@@ -678,6 +682,8 @@ describe('planning without a save', () => {
     const html = explorer(tree, [manualPal(manualSpec)]);
     expect(html).toContain('Jormuntide Ignis');
     expect(html).toContain('of hatches carry Artisan');
+    expect(html).toContain('Diagram');
+    expect(html).toContain('Copy Mermaid');
     expect(html).toContain('In breeding order');
     expect(html).toContain('Step 1');
     // A slot filled from the pool reports where that Pal is.

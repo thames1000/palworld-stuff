@@ -251,16 +251,16 @@ export function PlanBuilder({
             </Select>
           </Field>
           <Field label="Max generations">
-            <Select
+            <TextInput
+              type="number"
+              min={1}
+              step={1}
               value={String(spec.maxGenerations)}
-              onChange={(e) => set('maxGenerations', Number(e.target.value))}
-            >
-              {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </Select>
+              onChange={(e) => {
+                const parsed = Number(e.target.value);
+                set('maxGenerations', Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1);
+              }}
+            />
           </Field>
         </div>
 

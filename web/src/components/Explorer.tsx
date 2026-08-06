@@ -36,10 +36,11 @@ import {
   mutationResultsForPair,
 } from '@core/solver/mutations';
 import { maskedPassives } from '@core/solver/steps';
-import type { CakeVariant } from '@core/solver/types';
+import type { CakeVariant, TargetSpec } from '@core/solver/types';
 import { newId } from '../lib/manualPlan';
 import { PairPicker } from './PairPicker';
 import { PalDialog } from './PalDialog';
+import { PlanDiagram } from './PlanDiagram';
 import { SpeciesPicker } from './pickers';
 import { StepCard } from './PlanView';
 import { Button, Field, PassiveChip, Panel, Select, Stat, TextInput, stepOdds } from './ui';
@@ -739,6 +740,20 @@ export function Explorer({
     () => evaluateManualTree(syncHaves(tree, poolById), { requiredPassives }),
     [tree, poolById, requiredPassives],
   );
+  const diagramSpec = useMemo<TargetSpec>(
+    () => ({
+      speciesIndex: tree.speciesIndex,
+      requiredPassives,
+      excludedPassives: [],
+      minIvs: { hp: null, attack: null, defense: null },
+      gender: null,
+      maxGenerations: Math.max(1, plan.generations),
+      mode: 'balanced',
+      beamSize: 1200,
+      allowExcludedParents: true,
+    }),
+    [plan.generations, requiredPassives, tree.speciesIndex],
+  );
 
   const empty = !tree.parents && !tree.have;
 
@@ -886,6 +901,10 @@ export function Explorer({
           />
         </ul>
       </Panel>
+
+      {plan.complete && plan.valid && plan.steps.length > 0 && (
+        <PlanDiagram steps={plan.steps} spec={diagramSpec} />
+      )}
 
       {plan.steps.length > 0 && (
         <div>

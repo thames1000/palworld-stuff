@@ -31,7 +31,7 @@ export type { ManualNode } from './manualTree.js';
 export { newManualNode, updateManualNode } from './manualTree.js';
 
 /** Guards against a malformed persisted tree recursing forever. */
-const MAX_DEPTH = 16;
+const MAX_DEPTH = 128;
 
 export type ManualNodeStatus = 'have' | 'bred' | 'open';
 
