@@ -47,6 +47,13 @@ function describePal(pal: Pal): string {
   );
 }
 
+function percent(value: number, digits = 2): string {
+  if (!Number.isFinite(value)) return 'n/a';
+  const scaled = value * 100;
+  if (scaled > 0 && scaled < 0.01) return '<0.01%';
+  return `${scaled.toFixed(digits)}%`;
+}
+
 /** Post-order flatten so every step's parents are produced before the step itself. */
 function collectSteps(node: PlanNode, steps: PlanNode[] = []): PlanNode[] {
   if (!node.parents) return steps;
@@ -112,6 +119,12 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
     case 'breedable':
       lines.push(c(GREEN, 'Possible through breeding with Pals you already own.'));
       break;
+    case 'mutation-assisted':
+      lines.push(c(YELLOW, 'Possible, but the selected route depends on a mutation-created Pal.'));
+      break;
+    case 'mutation-only':
+      lines.push(c(YELLOW, 'No guaranteed route was found, but mutation attempts are available.'));
+      break;
   }
 
   if (result.plan) {
@@ -137,10 +150,34 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
       const childPassives = maskPassives(step.mask, spec.requiredPassives);
       const isFinal = step === result.plan;
 
-      lines.push(c(CYAN, `  Step ${n}${isFinal ? c(BOLD, '  (final)') : ''}`));
+      lines.push(
+        c(
+          CYAN,
+          `  Step ${n}${step.mutation ? '  (mutation)' : ''}${isFinal ? c(BOLD, '  (final)') : ''}`,
+        ),
+      );
       lines.push(`    Parent A: ${nodeLabel(a, stepNumbers)}`);
       lines.push(`    Parent B: ${nodeLabel(b, stepNumbers)}`);
       lines.push(`    ${c(BOLD, '->')} ${c(BOLD, speciesName(step.speciesIndex))}`);
+      if (step.mutation) {
+        lines.push(
+          c(
+            DIM,
+            step.mutation.kind === 'regular-child'
+              ? `       normal child, accepted only as a mutated hatch; ` +
+                `${percent(step.mutation.mutationChancePerHatch)} mutation chance per hatch`
+              : `       mutation share ${step.mutation.targetShare.toFixed(1)}% of mutated eggs; ` +
+                `${percent(step.mutation.speciesChancePerHatch)} species chance per hatch`,
+          ),
+        );
+        if (step.mutation.assumedPassives.length > 0) {
+          lines.push(
+            `       assumes mutation passive(s): ${step.mutation.assumedPassives
+              .map(passiveDisplayName)
+              .join(', ')}`,
+          );
+        }
+      }
       if (childPassives.length) {
         lines.push(`       keep only if it has: ${childPassives.join(', ')}`);
       }
@@ -190,6 +227,58 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
               ')',
           ),
       );
+    }
+  }
+
+  if (result.mutationAttempts.length > 0) {
+    lines.push('');
+    lines.push(c(BOLD, result.plan ? 'Mutation IV shortcuts:' : 'Mutation attempts:'));
+    for (const attempt of result.mutationAttempts) {
+      const fullTarget = attempt.expectedTargetHatches != null;
+      const shownHatches = attempt.expectedTargetHatches ?? attempt.expectedSpeciesHatches;
+      const shownCycles = expectedProductionCycles(shownHatches, spec.cake);
+      lines.push(
+        `  - ${speciesName(attempt.parentA.speciesIndex)} + ${speciesName(attempt.parentB.speciesIndex)}` +
+          c(
+            DIM,
+            `  (${attempt.parentA.location.label}; ${attempt.parentB.location.label})`,
+          ),
+      );
+      lines.push(
+        c(
+          DIM,
+          `    ${attempt.targetShare.toFixed(1)}% of mutated eggs -> ${target}; ` +
+            `${percent(attempt.speciesChancePerHatch)} species chance per hatch; ` +
+            `~${Math.ceil(shownHatches)} ${fullTarget ? 'target' : 'species'} hatches` +
+            (cake.eggsPerCycle > 1 ? `, ~${Math.ceil(shownCycles)} production cycle(s)` : ''),
+        ),
+      );
+      if (attempt.missingPassives.length > 0) {
+        lines.push(
+          c(
+            YELLOW,
+            `    species-only: missing passive(s) ${attempt.missingPassives
+              .map(passiveDisplayName)
+              .join(', ')}`,
+          ),
+        );
+      } else if (attempt.assumedPassives.length > 0) {
+        lines.push(
+          c(
+            DIM,
+            `    assumes mutation passive(s): ${attempt.assumedPassives
+              .map(passiveDisplayName)
+              .join(', ')}`,
+          ),
+        );
+      } else if (spec.requiredPassives.length > 0) {
+        lines.push(
+          c(DIM, `    passive inheritance chance: ${percent(attempt.passiveSuccess)} per mutated target`),
+        );
+      }
+      if (attempt.ivSuccess > 0 && (spec.minIvs.hp || spec.minIvs.attack || spec.minIvs.defense)) {
+        lines.push(c(DIM, `    IV floors included via mutation minimum ${attempt.mutationIvFloor}+. `));
+      }
     }
   }
 
@@ -252,6 +341,17 @@ export function planToJson(result: SolveResult, spec: TargetSpec): unknown {
       expectedProductionCycles: Number(expectedProductionCycles(step.stepEggs, spec.cake).toFixed(2)),
       successPerEgg: Number((1 / step.stepEggs).toFixed(4)),
       expectedUnwantedPassives: Number(step.expectedUnwanted.toFixed(2)),
+      mutation: step.mutation
+        ? {
+            targetShare: Number(step.mutation.targetShare.toFixed(4)),
+            kind: step.mutation.kind,
+            mutationChancePerHatch: step.mutation.mutationChancePerHatch,
+            speciesChancePerHatch: step.mutation.speciesChancePerHatch,
+            assumedPassives: step.mutation.assumedPassives.map(passiveDisplayName),
+            inheritedPassives: step.mutation.inheritedPassives.map(passiveDisplayName),
+            mutationIvFloor: step.mutation.mutationIvFloor,
+          }
+        : null,
     }));
   }
 
@@ -284,6 +384,34 @@ export function planToJson(result: SolveResult, spec: TargetSpec): unknown {
       generations: alt.generation,
       expectedEggs: Number(alt.totalEggs.toFixed(2)),
       expectedProductionCycles: Number(expectedProductionCycles(alt.totalEggs, spec.cake).toFixed(2)),
+    })),
+    mutationAttempts: result.mutationAttempts.map((attempt) => ({
+      parentA: palRef(attempt.parentA),
+      parentB: palRef(attempt.parentB),
+      targetShare: Number(attempt.targetShare.toFixed(4)),
+      mutationChancePerHatch: attempt.mutationChancePerHatch,
+      speciesChancePerHatch: attempt.speciesChancePerHatch,
+      targetChancePerHatch: attempt.targetChancePerHatch,
+      expectedSpeciesHatches: Number(attempt.expectedSpeciesHatches.toFixed(2)),
+      expectedTargetHatches:
+        attempt.expectedTargetHatches == null
+          ? null
+          : Number(attempt.expectedTargetHatches.toFixed(2)),
+      expectedSpeciesProductionCycles: Number(
+        expectedProductionCycles(attempt.expectedSpeciesHatches, spec.cake).toFixed(2),
+      ),
+      expectedTargetProductionCycles:
+        attempt.expectedTargetHatches == null
+          ? null
+          : Number(expectedProductionCycles(attempt.expectedTargetHatches, spec.cake).toFixed(2)),
+      targetGenderProbability: attempt.targetGenderProbability,
+      passiveSuccess: attempt.passiveSuccess,
+      assumedPassives: attempt.assumedPassives.map(passiveDisplayName),
+      inheritedPassives: attempt.inheritedPassives.map(passiveDisplayName),
+      missingPassives: attempt.missingPassives.map(passiveDisplayName),
+      ivSuccess: attempt.ivSuccess,
+      mutationIvFloor: attempt.mutationIvFloor,
+      reasons: attempt.reasons,
     })),
     missingPassives: result.missingPassives.map(passiveDisplayName),
     finalGenderProbability: result.finalGenderProbability,

@@ -28,6 +28,7 @@ import { newManualNode, updateManualNode, type ManualNode } from '@core/solver/m
 import {
   expectedMutationCount,
   hatchesForMutationConfidence,
+  isMutationPassive,
   mutationChanceAfterHatches,
   mutationChancePerHatch,
   mutationParentsForChild,
@@ -231,7 +232,7 @@ function MutationCalculator() {
   const chancePerHatch = mutationChancePerHatch(cake);
   const chance = mutationChanceAfterHatches(hatches, chancePerHatch);
   const expected = expectedMutationCount(hatches, chancePerHatch);
-  const mutationPassives = PASSIVES.filter((p) => p.internalName.startsWith('MutationPal_'));
+  const mutationPassives = PASSIVES.filter((p) => isMutationPassive(p.internalName));
   const confidences = [0.5, 0.9, 0.95];
 
   return (

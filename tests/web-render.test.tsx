@@ -387,9 +387,87 @@ describe('web UI', () => {
     expect(html).toContain('Cake strategy');
   });
 
+  it('renders mutation-assisted plan steps distinctly from normal breeding', () => {
+    const immortality = findPassive('Immortality')!.internalName;
+    const target = {
+      ...spec,
+      speciesIndex: findSpecies('Warsect Terra'),
+      requiredPassives: [immortality],
+      cake: 'extravagant-vegetable' as const,
+      minIvs: { hp: 90, attack: 90, defense: 90 },
+    };
+    const html = renderToString(
+      <PlanView
+        summary={{
+          spec: target,
+          feasibility: 'mutation-assisted',
+          steps: [
+            {
+              index: 1,
+              speciesIndex: findSpecies('Warsect Terra'),
+              mask: 1,
+              parents: [
+                {
+                  kind: 'owned',
+                  pal: { ...samplePal, instanceId: 'bron', speciesIndex: findSpecies('Broncherry') },
+                },
+                {
+                  kind: 'owned',
+                  pal: {
+                    ...samplePal,
+                    instanceId: 'blaz',
+                    speciesIndex: findSpecies('Blazamut'),
+                    gender: 'Female',
+                    passives: [],
+                  },
+                },
+              ],
+              expectedEggs: 91.2,
+              passiveSuccess: 1,
+              ivSuccess: 1,
+              genderFactor: 1,
+              genderRequirement: null,
+              mutation: {
+                kind: 'species-result',
+                targetShare: 15 / 41 * 100,
+                mutationChancePerHatch: 0.03,
+                speciesChancePerHatch: 0.03 * (15 / 41),
+                assumedPassives: [immortality],
+                inheritedPassives: [],
+                mutationIvFloor: 90,
+              },
+              expectedUnwanted: 0,
+              isFinal: true,
+            },
+          ],
+          generations: 1,
+          totalEggs: 91.2,
+          missingPassives: [immortality],
+          existingMatches: [],
+          alternatives: [],
+          finalGenderProbability: 1,
+          finalIvProbability: 1,
+          diagnostics: ['This route uses at least one mutation-created Pal.'],
+          searchedNodes: 12,
+          elapsedMs: 4,
+          candidateCount: 2,
+        }}
+        spec={target}
+      />,
+    ).replaceAll('<!-- -->', '');
+
+    expect(html).toContain('Possible with mutation help');
+    expect(html).toContain('mutation species');
+    expect(html).toContain('Assumes the mutated hatch supplies');
+    expect(html).toContain('Immortality');
+    expect(html).toContain('Mutation-supplied passives');
+    expect(html).toContain('minimum 90+ IVs');
+  });
+
   it('renders each solver verdict without throwing', () => {
     const verdicts = [
       'breedable',
+      'mutation-assisted',
       'already-owned',
       'missing-passives',
       'species-unreachable',
@@ -564,6 +642,7 @@ describe('planning without a save', () => {
     expect(html).toContain('Chance after');
     expect(html).toContain('Target chance');
     expect(html).toContain('Mutation passives');
+    expect(html).toContain('Skymarcher');
     expect(html).toContain('1.0% per hatch');
     expect(html).toContain('3.0%');
     expect(html).toContain('Mutation result lookup');

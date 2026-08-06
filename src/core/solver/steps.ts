@@ -7,7 +7,7 @@
  * "bred earlier" reference when a later branch would otherwise repeat the same subtree.
  */
 import type { Pal } from '../save/types.js';
-import type { GenderRequirement, PlanNode } from './types.js';
+import type { GenderRequirement, MutationStepInfo, PlanNode } from './types.js';
 
 export type PlanStepRef =
   | { kind: 'owned'; pal: Pal }
@@ -41,6 +41,7 @@ export interface PlanStep {
    */
   genderFactor: number;
   genderRequirement: GenderRequirement | null;
+  mutation?: MutationStepInfo | null;
   expectedUnwanted: number;
   isFinal: boolean;
 }
@@ -51,7 +52,14 @@ interface StepDraft {
 }
 
 function reuseKey(node: PlanNode): string {
-  return [node.speciesIndex, node.mask, node.poolSize, node.requiredGender ?? 'any'].join(':');
+  return [
+    node.speciesIndex,
+    node.mask,
+    node.poolSize,
+    node.requiredGender ?? 'any',
+    node.mutation?.kind ?? 'normal',
+    node.mutation?.assumedPassives.join('+') ?? '',
+  ].join(':');
 }
 
 /** Post-order walk, so every step occurrence's parents are produced before the step itself. */
@@ -87,6 +95,7 @@ export function flattenPlan(plan: PlanNode): PlanStep[] {
     ivSuccess: node.ivStepSuccess,
     genderFactor: node.genderFactor,
     genderRequirement: node.genderRequirement,
+    mutation: node.mutation ?? null,
     expectedUnwanted: node.expectedUnwanted,
     isFinal: node === plan,
   }));

@@ -69,7 +69,7 @@ function stepLabel(step: PlanStep, spec: TargetSpec): string {
   const cake = cakeInfo(spec.cake);
   const cycles = expectedProductionCycles(step.expectedEggs, spec.cake);
   return label([
-    `Step ${step.index}${step.isFinal ? ' final' : ''}: ${speciesName(step.speciesIndex)}`,
+    `Step ${step.index}${step.mutation ? ' mutation' : ''}${step.isFinal ? ' final' : ''}: ${speciesName(step.speciesIndex)}`,
     `~${step.expectedEggs.toFixed(1)} hatches`,
     cake.eggsPerCycle > 1 ? `~${cycles.toFixed(1)} cake cycles` : null,
   ]);

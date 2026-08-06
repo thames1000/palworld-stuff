@@ -28,6 +28,7 @@ import {
 import {
   expectedMutationCount,
   hatchesForMutationConfidence,
+  isMutationPassive,
   mutationChanceAfterHatches,
   mutationChancePerHatch,
   mutationParentsForChild,
@@ -206,6 +207,7 @@ describe('probability model', () => {
     expect(expectedMutationCount(100, 0.03)).toBeCloseTo(3, 12);
     expect(hatchesForMutationConfidence(0.01, 0.5)).toBe(69);
     expect(hatchesForMutationConfidence(0.03, 0.5)).toBe(23);
+    expect(isMutationPassive(findPassive('Skymarcher')!.internalName)).toBe(true);
   });
 
   it('models possible mutated children and reverse mutation parents', () => {
@@ -296,6 +298,108 @@ describe('solver', () => {
     expect(result.plan!.generation).toBe(1);
     expect(result.plan!.parents).not.toBeNull();
     expect(result.plan!.totalEggs).toBeGreaterThan(0);
+    expect(result.mutationAttempts).toEqual([]);
+    expect(result.plan!.mutation).toBeFalsy();
+  });
+
+  it('uses a mutation-created Pal as a source for missing mutation passives', () => {
+    const immortality = findPassive('Immortality')!.internalName;
+    const pals = [
+      makePal('Broncherry', 'Male', []),
+      makePal('Blazamut', 'Female', []),
+    ];
+    const result = solve(
+      pals,
+      spec({
+        speciesIndex: findSpecies('Warsect Terra'),
+        requiredPassives: [immortality],
+        maxGenerations: 1,
+        cake: 'extravagant-vegetable',
+      }),
+    );
+
+    expect(result.feasibility).toBe('mutation-assisted');
+    expect(result.plan).not.toBeNull();
+    expect(result.missingPassives).toEqual([immortality]);
+    expect(result.plan!.mutation?.assumedPassives).toEqual([immortality]);
+    expect(result.plan!.mutation?.targetShare).toBeCloseTo(15 / 41 * 100, 12);
+    expect(flattenPlan(result.plan!)[0]!.mutation?.assumedPassives).toEqual([immortality]);
+  });
+
+  it('can use the normal child as a mutated hatch for exclusive mutation passives', () => {
+    const idiosyncratic = findPassive('Idiosyncratic')!.internalName;
+    const pals = [
+      makePal('Relaxaurus Lux', 'Male', []),
+      makePal('Jormuntide Ignis', 'Female', []),
+    ];
+    const result = solve(
+      pals,
+      spec({
+        speciesIndex: findSpecies('Anubis'),
+        requiredPassives: [idiosyncratic],
+        maxGenerations: 1,
+        cake: 'extravagant-vegetable',
+      }),
+    );
+
+    expect(result.feasibility).toBe('mutation-assisted');
+    expect(result.plan).not.toBeNull();
+    expect(result.plan!.speciesIndex).toBe(findSpecies('Anubis'));
+    expect(result.plan!.mutation?.kind).toBe('regular-child');
+    expect(result.plan!.mutation?.assumedPassives).toEqual([idiosyncratic]);
+    expect(result.plan!.totalEggs).toBeCloseTo(1 / 0.03, 12);
+    expect(flattenPlan(result.plan!)).toHaveLength(1);
+  });
+
+  it('can carry a mutation-exclusive passive through a multi-step normal route', () => {
+    const idiosyncratic = findPassive('Idiosyncratic')!.internalName;
+    const pals = [
+      makePal('Sparkit', 'Male', []),
+      makePal('Relaxaurus', 'Female', []),
+      makePal('Jormuntide Ignis', 'Female', []),
+    ];
+    const result = solve(
+      pals,
+      spec({
+        speciesIndex: findSpecies('Anubis'),
+        requiredPassives: [idiosyncratic],
+        maxGenerations: 2,
+        cake: 'extravagant-vegetable',
+      }),
+    );
+    const steps = result.plan ? flattenPlan(result.plan) : [];
+
+    expect(result.feasibility).toBe('mutation-assisted');
+    expect(result.plan).not.toBeNull();
+    expect(result.plan!.speciesIndex).toBe(findSpecies('Anubis'));
+    expect(steps.some((step) => step.mutation?.assumedPassives.includes(idiosyncratic))).toBe(true);
+    expect(steps.at(-1)?.speciesIndex).toBe(findSpecies('Anubis'));
+  });
+
+  it('prefers mutation over random IV breeding when the mutation IV floor is faster', () => {
+    const pals = [
+      makePal('Warsect Terra', 'Male', [], [0, 0, 0]),
+      makePal('Warsect Terra', 'Female', [], [0, 0, 0]),
+      makePal('Broncherry', 'Male', [], [0, 0, 0]),
+      makePal('Blazamut', 'Female', [], [0, 0, 0]),
+    ];
+    const result = solve(
+      pals,
+      spec({
+        speciesIndex: findSpecies('Warsect Terra'),
+        requiredPassives: [],
+        minIvs: { hp: 90, attack: 90, defense: 90 },
+        maxGenerations: 1,
+        mode: 'eggs',
+        cake: 'extravagant-vegetable',
+      }),
+    );
+
+    expect(result.feasibility).toBe('mutation-assisted');
+    expect(result.plan).not.toBeNull();
+    expect(result.plan!.mutation).not.toBeNull();
+    expect(result.finalIvProbability).toBe(1);
+    expect(result.plan!.totalEggs).toBeLessThan(100);
   });
 
   it('renders a clean Mermaid diagram from a solved plan', () => {
@@ -662,12 +766,12 @@ describe('solver', () => {
       makePal('Relaxaurus Lux', 'Male', [], [100, 10, 10]),
       makePal('Jormuntide Ignis', 'Female', [], [100, 20, 20]),
     ];
-    const target = {
-      requiredPassives: [],
-      minIvs: { hp: 90, attack: 90, defense: 90 },
-      maxGenerations: 1,
-      mode: 'eggs' as const,
-    };
+	    const target = {
+	      requiredPassives: [],
+	      minIvs: { hp: 95, attack: 95, defense: 95 },
+	      maxGenerations: 1,
+	      mode: 'eggs' as const,
+	    };
 
     const standard = solve(pals, spec({ ...target, cake: 'standard' }));
     const mushroom = solve(pals, spec({ ...target, cake: 'mushroom' }));

@@ -10,6 +10,7 @@ const EXTRAVAGANT_MUTATION_CHANCE = 0.03;
 const MUTATION_RANK_COEFFICIENT = 0.5;
 const MUTATION_RANK_DIFF_PENALTY = 0.4;
 const MUTATION_RANDOM_COEFFICIENT = 0.1;
+const EXTRA_MUTATION_PASSIVE_INTERNAL_NAMES = new Set(['RideJumpCount_Increase2']);
 
 /**
  * Pals Palpedia marks `ignoreCombi`, meaning they can exist in breeding data but should not
@@ -65,6 +66,10 @@ export function mutationChancePerHatch(cake: CakeVariant | undefined): number {
   return cakeInfo(cake).id === 'extravagant-vegetable'
     ? EXTRAVAGANT_MUTATION_CHANCE
     : BASE_MUTATION_CHANCE;
+}
+
+export function isMutationPassive(internalName: string): boolean {
+  return internalName.startsWith('MutationPal_') || EXTRA_MUTATION_PASSIVE_INTERNAL_NAMES.has(internalName);
 }
 
 export function mutationChanceAfterHatches(

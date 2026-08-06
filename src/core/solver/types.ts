@@ -75,19 +75,72 @@ export interface PlanNode {
   parents: [PlanNode, PlanNode] | null;
   /** Gender this node must be bred as, when a sibling forced it. */
   requiredGender: 'Male' | 'Female' | null;
+  /** Set when this node is obtained by accepting a mutated egg instead of the normal child. */
+  mutation?: MutationStepInfo | null;
 }
 
 export type Feasibility =
   | 'already-owned'
   | 'breedable'
+  | 'mutation-assisted'
+  | 'mutation-only'
   | 'missing-passives'
   | 'species-unreachable'
   | 'no-pals';
+
+export interface MutationStepInfo {
+  /**
+   * `regular-child` means the pair's normal child was accepted as a mutated hatch.
+   * `species-result` means the mutation also changed the child species.
+   */
+  kind: 'regular-child' | 'species-result';
+  targetShare: number;
+  mutationChancePerHatch: number;
+  speciesChancePerHatch: number;
+  /** Mutation-exclusive passives this step assumes the mutated hatch can supply. */
+  assumedPassives: string[];
+  /** Target passives still inherited from the parent pool on this step. */
+  inheritedPassives: string[];
+  mutationIvFloor: 90;
+}
+
+export interface MutationAttempt {
+  parentA: Pal;
+  parentB: Pal;
+  /** Share of mutated eggs from this pair that land on the target species, as 0-100. */
+  targetShare: number;
+  /** Chance any produced egg mutates with the selected cake. */
+  mutationChancePerHatch: number;
+  /** Chance a produced egg becomes the requested target species, and target gender if set. */
+  speciesChancePerHatch: number;
+  /** Chance the mutated target also satisfies passives and IV floors that mutation can model. */
+  targetChancePerHatch: number;
+  /** Expected hatches for the requested species/gender mutation. */
+  expectedSpeciesHatches: number;
+  /** Expected hatches for the full requested target, or null when passives/IVs block it. */
+  expectedTargetHatches: number | null;
+  /** Gender odds included in `targetChancePerHatch`; 1 when no gender was requested. */
+  targetGenderProbability: number;
+  /** Chance the mutated target carries every requested passive from these parents. */
+  passiveSuccess: number;
+  /** Mutation-exclusive passives this target attempt assumes the mutated hatch can supply. */
+  assumedPassives: string[];
+  /** Target passives still inherited from the parent pool. */
+  inheritedPassives: string[];
+  /** Requested passives not present on this parent pair. */
+  missingPassives: string[];
+  /** Chance mutation satisfies the requested IV floors. Floors up to 90 are guaranteed. */
+  ivSuccess: number;
+  mutationIvFloor: 90;
+  reasons: Array<'no-regular-route' | 'faster-iv-target'>;
+}
 
 export interface SolveResult {
   feasibility: Feasibility;
   /** Best plan found, or null when none exists. */
   plan: PlanNode | null;
+  /** Chance-based mutation options, populated only when no route exists or IV mutation is faster. */
+  mutationAttempts: MutationAttempt[];
   /** Runner-up plans under the same mode, best first. */
   alternatives: PlanNode[];
   /** Required passives that no candidate Pal carries. */

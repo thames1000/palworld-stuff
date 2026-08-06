@@ -127,7 +127,7 @@ export function cakeNotes(spec: TargetSpec): string[] {
       return ['Vegetable Cake produces two eggs per cycle; hatch odds stay the same, production cycles drop.'];
     case 'extravagant-vegetable':
       return [
-        `Extravagant Vegetable Cake uses PalForge's estimated ${ivBonus} fresh-IV uplift when IV floors are set; mutation odds are not included in expected hatches yet.`,
+        `Extravagant Vegetable Cake uses PalForge's estimated ${ivBonus} fresh-IV uplift when IV floors are set; mutation odds are shown as separate chance-based options when applicable.`,
       ];
     case 'special':
       return [

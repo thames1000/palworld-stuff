@@ -1,7 +1,7 @@
 /** Message contract between the UI thread and the parse/solve worker. */
 import type { SaveData, Pal } from '@core/save/types';
 import type { PlanStep } from '@core/solver/steps';
-import type { Feasibility, TargetSpec } from '@core/solver/types';
+import type { Feasibility, MutationAttempt, TargetSpec } from '@core/solver/types';
 
 export interface Scope {
   /** Only use Pals owned by this player. Null means every player in the save. */
@@ -29,6 +29,7 @@ export interface SolveSummary {
   feasibility: Feasibility;
   /** Flattened breeding steps, ready to render. Empty when there is no plan. */
   steps: PlanStep[];
+  mutationAttempts?: MutationAttempt[];
   generations: number | null;
   totalEggs: number | null;
   missingPassives: string[];

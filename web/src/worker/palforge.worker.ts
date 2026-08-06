@@ -55,6 +55,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           spec: request.spec,
           feasibility: result.feasibility,
           steps: result.plan ? flattenPlan(result.plan) : [],
+          mutationAttempts: result.mutationAttempts,
           generations: result.plan?.generation ?? null,
           totalEggs: result.plan?.totalEggs ?? null,
           missingPassives: result.missingPassives,

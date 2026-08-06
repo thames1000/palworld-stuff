@@ -19,6 +19,16 @@ const VERDICTS: Record<Feasibility, { title: string; tone: string; body: string 
     tone: 'border-good/40 bg-good/10 text-good',
     body: 'A complete route exists using only Pals already in your save.',
   },
+  'mutation-assisted': {
+    title: 'Possible with mutation help',
+    tone: 'border-warn/40 bg-warn/10 text-warn',
+    body: 'A route exists, but it starts from at least one chance-based mutation hatch.',
+  },
+  'mutation-only': {
+    title: 'Mutation attempt available',
+    tone: 'border-warn/40 bg-warn/10 text-warn',
+    body: 'No guaranteed route is available, but one or more owned pairs can try for this target through mutation.',
+  },
   'missing-passives': {
     title: 'Not currently possible',
     tone: 'border-warn/40 bg-warn/10 text-warn',
@@ -110,6 +120,19 @@ function ivSummary(minIvs: TargetSpec['minIvs']): string | null {
   return parts.length > 0 ? parts.join(', ') : null;
 }
 
+function percent(value: number, digits = 1): string {
+  if (!Number.isFinite(value)) return '—';
+  const scaled = value * 100;
+  if (scaled > 0 && scaled < 0.01) return '<0.01%';
+  return `${scaled.toFixed(digits)}%`;
+}
+
+function sharePercent(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '—';
+  if (value < 1) return '<1%';
+  return `${value.toFixed(value >= 10 ? 0 : 1)}%`;
+}
+
 function TargetSummary({ spec }: { spec: TargetSpec }) {
   const ivs = ivSummary(spec.minIvs);
   return (
@@ -148,6 +171,7 @@ export function StepCard({
   const cakeDetails = cakeInfo(cake);
   const cycles = expectedProductionCycles(step.expectedEggs, cake);
   const ivBonus = cakeIvBonusLabel(cakeDetails.id);
+  const mutation = step.mutation ?? null;
   const ivKeep = [
     floors.hp != null && floors.hp > 0 ? `HP ≥ ${floors.hp}` : null,
     floors.attack != null && floors.attack > 0 ? `Attack ≥ ${floors.attack}` : null,
@@ -168,7 +192,8 @@ export function StepCard({
         </span>
         <span className="nums text-[11px] text-ink-2">
           ~{step.expectedEggs.toFixed(1)} hatches
-          {cakeDetails.eggsPerCycle > 1 ? ` · ~${cycles.toFixed(1)} cycles` : ''} · {odds.hatch}
+          {cakeDetails.eggsPerCycle > 1 ? ` · ~${cycles.toFixed(1)} cycles` : ''}
+          {mutation ? ` · ${percent(mutation.speciesChancePerHatch, 2)} mutation species` : ` · ${odds.hatch}`}
           {ivKeep.length > 0 && step.ivSuccess != null
             ? ` · ${(step.ivSuccess * 100).toFixed(1)}% IVs`
             : ''}
@@ -182,6 +207,7 @@ export function StepCard({
       <div className="border-t border-edge/50 px-3 py-2">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="text-ink-2">→</span>
+          {mutation && <span className="text-[11px] font-semibold text-warn">mutation</span>}
           <span className="text-sm font-semibold text-ink-0">{speciesName(step.speciesIndex)}</span>
           {keep.length > 0 && (
             <>
@@ -194,10 +220,54 @@ export function StepCard({
             </>
           )}
         </div>
+        {mutation && (
+          <p className="mt-1 text-[11px] text-ink-1">
+            {mutation.kind === 'regular-child' ? (
+              <>
+                Uses the normal child when that hatch mutates; mutation chance is{' '}
+                <span className="nums text-ink-0">{percent(mutation.mutationChancePerHatch)}</span>{' '}
+                per hatch.
+              </>
+            ) : (
+              <>
+                Mutation share:{' '}
+                <span className="nums text-ink-0">{sharePercent(mutation.targetShare)}</span>{' '}
+                of mutated eggs; base mutation chance is{' '}
+                <span className="nums text-ink-0">{percent(mutation.mutationChancePerHatch)}</span>{' '}
+                per hatch.
+              </>
+            )}
+          </p>
+        )}
+        {mutation && mutation.assumedPassives.length > 0 && (
+          <p className="mt-1 text-[11px] text-warn">
+            Assumes the mutated hatch supplies{' '}
+            <span className="inline-flex flex-wrap gap-1 align-middle">
+              {mutation.assumedPassives.map((passive) => (
+                <PassiveChip key={passive} internalName={passive} />
+              ))}
+            </span>
+            .
+          </p>
+        )}
+        {mutation && mutation.inheritedPassives.length > 0 && (
+          <p className="mt-1 text-[11px] text-ink-1">
+            Inherits{' '}
+            <span className="inline-flex flex-wrap gap-1 align-middle">
+              {mutation.inheritedPassives.map((passive) => (
+                <PassiveChip key={passive} internalName={passive} />
+              ))}
+            </span>{' '}
+            from the parent pool.
+          </p>
+        )}
         {odds.gender && <p className="mt-1 text-[11px] text-ink-2">Note: {odds.gender}.</p>}
         {ivKeep.length > 0 && (
           <p className="mt-1 text-[11px] text-ink-1">
-            Keep only if its IVs are <span className="nums text-ink-0">{ivKeep.join(', ')}</span>.
+            {mutation
+              ? `Mutated hatches are counted as minimum ${mutation.mutationIvFloor}+ IVs for this step.`
+              : 'Keep only if its IVs are '}
+            {!mutation && <span className="nums text-ink-0">{ivKeep.join(', ')}</span>}
           </p>
         )}
         {cakeDetails.id === 'vegetable' && (
@@ -214,8 +284,8 @@ export function StepCard({
         {cakeDetails.id === 'extravagant-vegetable' && (
           <p className="mt-1 text-[11px] text-ink-2">
             {ivKeep.length > 0
-              ? `Extravagant Vegetable Cake includes an estimated ${ivBonus} fresh-IV uplift; mutation odds are not part of the hatch estimate yet.`
-              : 'Extravagant Vegetable Cake is the mutation-focused choice; mutation odds are not part of the hatch estimate yet.'}
+              ? `Extravagant Vegetable Cake includes an estimated ${ivBonus} fresh-IV uplift; mutation odds are shown separately when they beat the regular route.`
+              : 'Extravagant Vegetable Cake is the mutation-focused choice; mutation odds are shown separately when useful.'}
           </p>
         )}
         {cakeDetails.id === 'special' && keep.length > 1 && (
@@ -230,6 +300,145 @@ export function StepCard({
         )}
       </div>
     </li>
+  );
+}
+
+function MutationAttemptCard({
+  attempt,
+  spec,
+}: {
+  attempt: NonNullable<SolveSummary['mutationAttempts']>[number];
+  spec: TargetSpec;
+}) {
+  const fullTarget = attempt.expectedTargetHatches != null;
+  const shownHatches = attempt.expectedTargetHatches ?? attempt.expectedSpeciesHatches;
+  const shownCycles = expectedProductionCycles(shownHatches, spec.cake);
+  const ivs = ivSummary(spec.minIvs);
+  const fasterIv = attempt.reasons.includes('faster-iv-target');
+
+  return (
+    <li className="rounded-lg border border-edge/60 bg-surface-1">
+      <div className="flex flex-wrap items-center gap-2 border-b border-edge/50 px-3 py-2">
+        <span className="text-xs font-semibold text-ink-1">
+          {fasterIv ? 'IV shortcut' : 'Mutation fallback'}
+        </span>
+        <span
+          className={`rounded border px-1.5 py-px text-[10px] ${
+            fullTarget
+              ? 'border-good/40 bg-good/12 text-good'
+              : 'border-warn/40 bg-warn/12 text-warn'
+          }`}
+        >
+          {fullTarget ? 'full target odds' : 'species-only odds'}
+        </span>
+        <span className="ml-auto text-sm font-semibold text-ink-0">
+          {speciesName(spec.speciesIndex)}
+        </span>
+      </div>
+
+      <div className="grid gap-3 p-3 md:grid-cols-[1fr_auto_1fr]">
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-ink-2">Parent A</div>
+          <PalCard pal={attempt.parentA} />
+        </div>
+        <div className="hidden select-none items-center text-xl text-ink-2 md:flex">+</div>
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-ink-2">Parent B</div>
+          <PalCard pal={attempt.parentB} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 border-t border-edge/50 px-3 py-3 sm:grid-cols-4">
+        <Stat label="Mutation share" value={sharePercent(attempt.targetShare)} />
+        <Stat label="Species / hatch" value={percent(attempt.speciesChancePerHatch, 2)} />
+        <Stat
+          label={fullTarget ? 'Full target / hatch' : 'Full target'}
+          value={fullTarget ? percent(attempt.targetChancePerHatch, 2) : 'blocked'}
+          tone={fullTarget ? 'text-good' : 'text-warn'}
+        />
+        <Stat
+          label={fullTarget ? 'Expected target' : 'Expected species'}
+          value={`~${Math.ceil(shownHatches).toLocaleString()}`}
+          tone={fasterIv ? 'text-good' : undefined}
+        />
+      </div>
+
+      <div className="space-y-1.5 border-t border-edge/50 px-3 py-2 text-[11px] text-ink-1">
+        <p className="nums">
+          Production cycles: ~{Math.ceil(shownCycles).toLocaleString()} with {cakeInfo(spec.cake).shortLabel}.
+        </p>
+        {attempt.assumedPassives.length > 0 && (
+          <p className="text-warn">
+            Assumes the mutated hatch supplies{' '}
+            <span className="inline-flex flex-wrap gap-1 align-middle">
+              {attempt.assumedPassives.map((passive) => (
+                <PassiveChip key={passive} internalName={passive} />
+              ))}
+            </span>
+            .
+          </p>
+        )}
+        {attempt.inheritedPassives.length > 0 && attempt.missingPassives.length === 0 && (
+          <p>
+            Passives:{' '}
+            <span className="nums text-ink-0">{percent(attempt.passiveSuccess)}</span>{' '}
+            to inherit{' '}
+            <span className="inline-flex flex-wrap gap-1 align-middle">
+              {attempt.inheritedPassives.map((passive) => (
+                <PassiveChip key={passive} internalName={passive} />
+              ))}
+            </span>
+            .
+          </p>
+        )}
+        {attempt.missingPassives.length > 0 && (
+          <p className="text-warn">
+            Passives still needed: {attempt.missingPassives.map(passiveDisplayName).join(', ')}.
+          </p>
+        )}
+        {ivs && attempt.ivSuccess > 0 && (
+          <p>
+            IVs: mutated eggs are counted as minimum {attempt.mutationIvFloor}+ IVs, satisfying{' '}
+            <span className="nums text-ink-0">{ivs}</span>.
+          </p>
+        )}
+        {ivs && attempt.ivSuccess <= 0 && (
+          <p className="text-warn">
+            IVs: this target asks above {attempt.mutationIvFloor}, so mutation is not counted as a
+            full IV solution.
+          </p>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function MutationAttemptsPanel({
+  attempts,
+  spec,
+  hasRegularPlan,
+}: {
+  attempts: NonNullable<SolveSummary['mutationAttempts']>;
+  spec: TargetSpec;
+  hasRegularPlan: boolean;
+}) {
+  return (
+    <Panel title={hasRegularPlan ? 'Mutation IV shortcut' : 'Mutation attempts'}>
+      <p className="mb-3 text-sm text-ink-1">
+        {hasRegularPlan
+          ? 'The regular plan is still valid. These direct mutation pairs are shown because their full-target IV estimate is faster.'
+          : 'These are chance-based direct pairs from your owned Pals; they are not guaranteed breeding routes.'}
+      </p>
+      <ol className="space-y-3">
+        {attempts.map((attempt) => (
+          <MutationAttemptCard
+            key={`${attempt.parentA.instanceId}-${attempt.parentB.instanceId}-${attempt.reasons.join('-')}`}
+            attempt={attempt}
+            spec={spec}
+          />
+        ))}
+      </ol>
+    </Panel>
   );
 }
 
@@ -252,6 +461,7 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
   const stale = !sameSpec(solvedSpec, spec);
   const cake = cakeInfo(solvedSpec.cake);
   const notes = cakeNotes(solvedSpec);
+  const mutationAttempts = summary.mutationAttempts ?? [];
 
   return (
     <div className="space-y-4">
@@ -293,6 +503,14 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
 
       {summary.steps.length > 0 && <PlanDiagram steps={summary.steps} spec={solvedSpec} />}
 
+      {mutationAttempts.length > 0 && (
+        <MutationAttemptsPanel
+          attempts={mutationAttempts}
+          spec={solvedSpec}
+          hasRegularPlan={summary.steps.length > 0}
+        />
+      )}
+
       {summary.existingMatches.length > 0 && (
         <Panel title={`Matching Pals you own (${summary.existingMatches.length})`}>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -303,7 +521,20 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
         </Panel>
       )}
 
-      {summary.missingPassives.length > 0 && (
+      {summary.missingPassives.length > 0 && summary.feasibility === 'mutation-assisted' && (
+        <Panel title="Mutation-supplied passives">
+          <p className="text-sm text-ink-1">
+            No Pal in scope currently carries{' '}
+            <span className="font-medium text-ink-0">
+              {summary.missingPassives.map(passiveDisplayName).join(', ')}
+            </span>
+            . The plan assumes a mutation-created Pal supplies the missing mutation passive before
+            normal breeding continues.
+          </p>
+        </Panel>
+      )}
+
+      {summary.missingPassives.length > 0 && summary.feasibility !== 'mutation-assisted' && (
         <Panel title="Missing passives">
           <p className="text-sm text-ink-1">
             No Pal in scope carries{' '}
