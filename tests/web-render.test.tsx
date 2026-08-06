@@ -120,7 +120,35 @@ describe('web UI', () => {
     );
     expect(html).toContain('Final IV odds estimate');
     expect(html).toContain('prefer routes likely to reach your thresholds');
-    expect(html).toContain('IV rerolls are included in expected egg totals');
+    expect(html).toContain('IV rerolls are included in expected hatch totals, including selected cake modifiers');
+    expect(html).toContain('Cake variant');
+    expect(html).toContain('Mushroom Cake');
+    expect(html).toContain('Vegetable Cake');
+    expect(html).toContain('Extravagant Vegetable Cake');
+    expect(html).toContain('Special Cake');
+  });
+
+  it('shows IV-focused cake uplift in the target readiness panel', () => {
+    const html = renderToString(
+      <PlanBuilder
+        spec={{ ...spec, cake: 'mushroom', minIvs: { hp: 90, attack: 90, defense: 90 } }}
+        onChange={() => {}}
+        onSolve={() => {}}
+        solving={false}
+        candidateCount={4}
+        readiness={{
+          targetOwnedCount: 0,
+          coveredRequiredPassives: [findPassive('Artisan')!.internalName],
+          missingRequiredPassives: [],
+          excludedCarrierCount: 0,
+          unknownGenderCount: 0,
+        }}
+      />,
+    ).replaceAll('<!-- -->', '');
+
+    expect(html).toContain('IV uplift');
+    expect(html).toContain('+1 to +5 fresh');
+    expect(html).toContain('estimated +1 to +5 fresh-IV uplift');
   });
 
   it('preflights the target against the current Pal pool before solving', () => {
@@ -128,6 +156,7 @@ describe('web UI', () => {
       <PlanBuilder
         spec={{
           ...spec,
+          cake: 'vegetable',
           requiredPassives: [
             findPassive('Artisan')!.internalName,
             findPassive('Legend')!.internalName,
@@ -153,6 +182,8 @@ describe('web UI', () => {
     expect(html).toContain('12');
     expect(html).toContain('1/2 in scope');
     expect(html).toContain('HP ≥ 90');
+    expect(html).toContain('Egg production');
+    expect(html).toContain('2 eggs/cycle');
     expect(html).toContain('Excluded carriers');
     expect(html).toContain('Unknown gender');
     expect(html).toContain('Legend');
@@ -248,7 +279,7 @@ describe('web UI', () => {
     const html = renderToString(
       <PlanView
         summary={{
-          spec: { ...spec, minIvs: { hp: 90, attack: 90, defense: 90 } },
+          spec: { ...spec, cake: 'mushroom', minIvs: { hp: 90, attack: 90, defense: 90 } },
           feasibility: 'breedable',
           steps: [
             {
@@ -289,7 +320,7 @@ describe('web UI', () => {
           elapsedMs: 3,
           candidateCount: 2,
         }}
-        spec={{ ...spec, minIvs: { hp: 90, attack: 90, defense: 90 } }}
+        spec={{ ...spec, cake: 'mushroom', minIvs: { hp: 90, attack: 90, defense: 90 } }}
       />,
     ).replaceAll('<!-- -->', '');
 
@@ -299,6 +330,61 @@ describe('web UI', () => {
     expect(html).toContain('flowchart TD');
     expect(html).toContain('12.5% IVs');
     expect(html).toContain('HP ≥ 90, Attack ≥ 90, Defense ≥ 90');
+    expect(html).toContain('Mushroom Cake is included in these IV odds');
+  });
+
+  it('shows cake-adjusted production cycles for Vegetable Cake plans', () => {
+    const html = renderToString(
+      <PlanView
+        summary={{
+          spec: { ...spec, cake: 'vegetable' },
+          feasibility: 'breedable',
+          steps: [
+            {
+              index: 1,
+              speciesIndex: findSpecies('Anubis'),
+              mask: 1,
+              parents: [
+                { kind: 'owned', pal: samplePal },
+                {
+                  kind: 'owned',
+                  pal: {
+                    ...samplePal,
+                    instanceId: 'b',
+                    speciesIndex: findSpecies('Jormuntide Ignis'),
+                    gender: 'Female',
+                    passives: [],
+                  },
+                },
+              ],
+              expectedEggs: 4,
+              passiveSuccess: 0.25,
+              genderFactor: 1,
+              genderRequirement: null,
+              expectedUnwanted: 0,
+              isFinal: true,
+            },
+          ],
+          generations: 1,
+          totalEggs: 4,
+          missingPassives: [],
+          existingMatches: [],
+          alternatives: [],
+          finalGenderProbability: 0.5,
+          finalIvProbability: null,
+          diagnostics: [],
+          searchedNodes: 10,
+          elapsedMs: 3,
+          candidateCount: 2,
+        }}
+        spec={{ ...spec, cake: 'vegetable' }}
+      />,
+    ).replaceAll('<!-- -->', '');
+
+    expect(html).toContain('Expected hatches');
+    expect(html).toContain('Production cycles');
+    expect(html).toContain('Vegetable Cake turns this into about');
+    expect(html).toContain('Cake strategy');
   });
 
   it('renders each solver verdict without throwing', () => {
@@ -471,6 +557,25 @@ describe('planning without a save', () => {
     expect(html).toContain('Breed it');
   });
 
+  it('adds a mutation calculator under Explore', () => {
+    const html = explorer(newManualNode('root', findSpecies('Anubis')));
+    expect(html).toContain('Mutation calculator');
+    expect(html).toContain('Extravagant Vegetable Cake');
+    expect(html).toContain('Chance after');
+    expect(html).toContain('Target chance');
+    expect(html).toContain('Mutation passives');
+    expect(html).toContain('1.0% per hatch');
+    expect(html).toContain('3.0%');
+    expect(html).toContain('Mutation result lookup');
+    expect(html).toContain('Possible mutated children');
+    expect(html).toContain('Normal child');
+    expect(html).toContain('Majex');
+    expect(html).toContain('Solmora Lux');
+    expect(html).toContain('Reverse mutation lookup');
+    expect(html).toContain('Same-species parents');
+    expect(html).toContain('Same-pair options');
+  });
+
   it('renders a finished tree with its steps and egg estimate', () => {
     const relaxaurus = findSpecies('Relaxaurus Lux');
     const jormuntide = findSpecies('Jormuntide Ignis');
@@ -575,9 +680,10 @@ describe('planning without a save', () => {
       />,
     ).replaceAll('<!-- -->', '');
 
+    const treeHtml = html.slice(0, html.indexOf('Mutation calculator'));
     // No required passives, so nothing about the egg itself is a gamble.
-    expect(html).toContain('every hatch is the right species');
-    expect(html).not.toContain('% per hatch');
+    expect(treeHtml).toContain('every hatch is the right species');
+    expect(treeHtml).not.toContain('% per hatch');
     // The 50% must be attributed to the parent's gender, and named as such.
     expect(html).toContain('must come out');
     expect(html).toMatch(new RegExp(`the ${speciesName(pa)} you breed must come out (Male|Female)`));

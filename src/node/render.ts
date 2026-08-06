@@ -1,6 +1,12 @@
 /** Human-readable rendering of a breeding plan. */
 import { passiveDisplayName, speciesName, SPECIES } from '../core/data/index.js';
 import type { Pal } from '../core/save/types.js';
+import {
+  cakeInfo,
+  cakeIvBonusLabel,
+  cakeNotes,
+  expectedProductionCycles,
+} from '../core/solver/cakes.js';
 import { renderPlanMermaid } from '../core/solver/diagram.js';
 import { popcount } from '../core/solver/probability.js';
 import { flattenPlan } from '../core/solver/steps.js';
@@ -60,6 +66,7 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
   const lines: string[] = [];
   const target = speciesName(spec.speciesIndex);
   const wanted = spec.requiredPassives.map(passiveDisplayName);
+  const cake = cakeInfo(spec.cake);
 
   lines.push('');
   lines.push(c(BOLD, `Target: ${target}${wanted.length ? ` with ${wanted.join(' + ')}` : ''}`));
@@ -71,6 +78,9 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
   if (spec.excludedPassives.length) {
     constraints.push(`without ${spec.excludedPassives.map(passiveDisplayName).join(', ')}`);
   }
+  if (cake.id !== 'standard') constraints.push(`${cake.label} (${cake.focus})`);
+  const ivBonus = cakeIvBonusLabel(spec.cake);
+  if (ivBonus) constraints.push(`fresh IV uplift ${ivBonus}`);
   if (constraints.length) lines.push(c(DIM, `        ${constraints.join(', ')}`));
   lines.push('');
 
@@ -111,7 +121,13 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
 
     lines.push('');
     lines.push(
-      c(BOLD, `Plan: ${steps.length} breeding step(s), ~${Math.ceil(result.plan.totalEggs)} eggs total`),
+      c(
+        BOLD,
+        `Plan: ${steps.length} breeding step(s), ~${Math.ceil(result.plan.totalEggs)} hatches total` +
+          (cake.eggsPerCycle > 1
+            ? `, ~${Math.ceil(expectedProductionCycles(result.plan.totalEggs, spec.cake))} production cycle(s)`
+            : ''),
+      ),
     );
     lines.push('');
 
@@ -129,8 +145,14 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
         lines.push(`       keep only if it has: ${childPassives.join(', ')}`);
       }
       lines.push(
-        `       ${c(DIM, `~${step.stepEggs.toFixed(1)} eggs (${(100 / step.stepEggs).toFixed(1)}% per egg)` +
-          `, ~${step.expectedUnwanted.toFixed(1)} junk passive(s) expected`)}`,
+        `       ${c(
+          DIM,
+          `~${step.stepEggs.toFixed(1)} hatches (${(100 / step.stepEggs).toFixed(1)}% per hatch)` +
+            (cake.eggsPerCycle > 1
+              ? `, ~${expectedProductionCycles(step.stepEggs, spec.cake).toFixed(1)} production cycle(s)`
+              : '') +
+            `, ~${step.expectedUnwanted.toFixed(1)} junk passive(s) expected`,
+        )}`,
       );
       lines.push('');
     }
@@ -138,14 +160,20 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
     if (spec.gender) {
       lines.push(
         c(DIM, `  Final gender ${spec.gender}: ${(result.finalGenderProbability * 100).toFixed(0)}% per hatch ` +
-          `(already included in the egg estimate for intermediate steps only).`),
+          `(already included in the hatch estimate for intermediate steps only).`),
       );
     }
     if (result.finalIvProbability != null) {
       lines.push(
-        c(DIM, `  IV thresholds on the final step: ${(result.finalIvProbability * 100).toFixed(1)}% per hatch.`),
+        c(
+          DIM,
+          `  IV thresholds on the final step: ${(result.finalIvProbability * 100).toFixed(1)}% per hatch` +
+            (ivBonus ? ` with ${cake.shortLabel}` : '') +
+            '.',
+        ),
       );
     }
+    for (const note of cakeNotes(spec)) lines.push(c(DIM, `  ${note}`));
   } else if (result.alternatives.length > 0) {
     lines.push('');
     lines.push(c(BOLD, 'Closest achievable builds:'));
@@ -153,7 +181,14 @@ export function renderPlan(result: SolveResult, spec: TargetSpec): string {
       const have = maskPassives(alt.mask, spec.requiredPassives);
       lines.push(
         `  - ${speciesName(alt.speciesIndex)} with ${have.length ? have.join(' + ') : 'no target passives'}` +
-          c(DIM, `  (${alt.generation} generation(s), ~${Math.ceil(alt.totalEggs)} eggs)`),
+          c(
+            DIM,
+            `  (${alt.generation} generation(s), ~${Math.ceil(alt.totalEggs)} hatches` +
+              (cake.eggsPerCycle > 1
+                ? `, ~${Math.ceil(expectedProductionCycles(alt.totalEggs, spec.cake))} cycle(s)`
+                : '') +
+              ')',
+          ),
       );
     }
   }
@@ -184,6 +219,7 @@ export function renderMermaid(plan: PlanNode, spec: TargetSpec): string {
  * parent referenced either as an owned Pal or as an earlier step number.
  */
 export function planToJson(result: SolveResult, spec: TargetSpec): unknown {
+  const cake = cakeInfo(spec.cake);
   const palRef = (pal: Pal) => ({
     instanceId: pal.instanceId,
     species: speciesName(pal.speciesIndex),
@@ -213,6 +249,7 @@ export function planToJson(result: SolveResult, spec: TargetSpec): unknown {
         keepIfItHas: maskPassives(step.mask, spec.requiredPassives),
       },
       expectedEggs: Number(step.stepEggs.toFixed(2)),
+      expectedProductionCycles: Number(expectedProductionCycles(step.stepEggs, spec.cake).toFixed(2)),
       successPerEgg: Number((1 / step.stepEggs).toFixed(4)),
       expectedUnwantedPassives: Number(step.expectedUnwanted.toFixed(2)),
     }));
@@ -225,10 +262,20 @@ export function planToJson(result: SolveResult, spec: TargetSpec): unknown {
       excludedPassives: spec.excludedPassives.map(passiveDisplayName),
       gender: spec.gender,
       minIvs: spec.minIvs,
+      cake: {
+        id: cake.id,
+        label: cake.label,
+        focus: cake.focus,
+        eggsPerCycle: cake.eggsPerCycle,
+        freshIvBonus: cake.freshIvBonus ?? null,
+      },
     },
     feasibility: result.feasibility,
     generations: result.plan?.generation ?? null,
     totalExpectedEggs: result.plan ? Number(result.plan.totalEggs.toFixed(2)) : null,
+    totalExpectedProductionCycles: result.plan
+      ? Number(expectedProductionCycles(result.plan.totalEggs, spec.cake).toFixed(2))
+      : null,
     steps,
     existingMatches: result.existingMatches.map(palRef),
     alternatives: result.alternatives.map((alt) => ({
@@ -236,6 +283,7 @@ export function planToJson(result: SolveResult, spec: TargetSpec): unknown {
       passives: maskPassives(alt.mask, spec.requiredPassives),
       generations: alt.generation,
       expectedEggs: Number(alt.totalEggs.toFixed(2)),
+      expectedProductionCycles: Number(expectedProductionCycles(alt.totalEggs, spec.cake).toFixed(2)),
     })),
     missingPassives: result.missingPassives.map(passiveDisplayName),
     finalGenderProbability: result.finalGenderProbability,

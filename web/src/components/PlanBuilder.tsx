@@ -1,13 +1,14 @@
 /** The target specification form: what you want bred, and how you want it optimised. */
 import { speciesName } from '@core/data/index';
+import { CAKES, cakeInfo, cakeIvBonusLabel } from '@core/solver/cakes';
 import type { OptimizationMode, TargetSpec } from '@core/solver/types';
 import { Button, Field, Panel, PassiveChip, Select, Spinner, TextInput } from './ui';
 import { PassivePicker, SpeciesPicker } from './pickers';
 
 const MODES: Array<{ value: OptimizationMode; label: string; hint: string }> = [
-  { value: 'balanced', label: 'Balanced', hint: 'Weighs generations, eggs and junk passives together.' },
+  { value: 'balanced', label: 'Balanced', hint: 'Weighs generations, hatches and junk passives together.' },
   { value: 'generations', label: 'Fewest generations', hint: 'Shortest chain, even if each step is unlikely.' },
-  { value: 'eggs', label: 'Fewest eggs', hint: 'Lowest expected total hatches.' },
+  { value: 'eggs', label: 'Fewest hatches', hint: 'Lowest expected total hatches.' },
   { value: 'clean', label: 'Cleanest passives', hint: 'Minimises unwanted passives you will have to breed out.' },
 ];
 
@@ -42,6 +43,8 @@ function ReadinessPanel({
     passiveTotal === 0
       ? 'None required'
       : `${readiness.coveredRequiredPassives.length}/${passiveTotal} in scope`;
+  const cake = cakeInfo(spec.cake);
+  const ivBonus = cakeIvBonusLabel(spec.cake);
   const status =
     candidateCount === 0
       ? { label: 'No candidates', tone: 'border-bad/40 bg-bad/10 text-bad' }
@@ -80,6 +83,22 @@ function ReadinessPanel({
           <dt className="text-ink-2">IV floors</dt>
           <dd className="nums text-ink-0">{formatIvFloors(spec.minIvs)}</dd>
         </div>
+        <div className="flex items-center justify-between gap-2">
+          <dt className="text-ink-2">Cake focus</dt>
+          <dd className="text-ink-0">{cake.focus}</dd>
+        </div>
+        {cake.eggsPerCycle > 1 && (
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-ink-2">Egg output</dt>
+            <dd className="nums text-good">{cake.eggsPerCycle} eggs/cycle</dd>
+          </div>
+        )}
+        {ivBonus && (
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-ink-2">IV uplift</dt>
+            <dd className="nums text-good">{ivBonus} fresh</dd>
+          </div>
+        )}
         {spec.excludedPassives.length > 0 && (
           <div className="flex items-center justify-between gap-2">
             <dt className="text-ink-2">Excluded carriers</dt>
@@ -153,6 +172,7 @@ export function PlanBuilder({
   );
 
   const mode = MODES.find((m) => m.value === spec.mode);
+  const cake = cakeInfo(spec.cake);
 
   return (
     <Panel title="Target">
@@ -189,12 +209,26 @@ export function PlanBuilder({
           <ReadinessPanel readiness={readiness} candidateCount={candidateCount} spec={spec} />
         )}
 
+        <Field label="Cake" hint={cake.effect}>
+          <Select
+            value={cake.id}
+            onChange={(e) => set('cake', e.target.value as TargetSpec['cake'])}
+            aria-label="Cake variant"
+          >
+            {CAKES.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label} - {option.focus}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
         <div className="rounded-md border border-edge/60 bg-surface-2/40 p-3">
           <div className="text-xs font-medium text-ink-1">Final IV odds estimate</div>
           <p className="mt-0.5 text-[11px] leading-relaxed text-ink-2">
             Used to identify matching Pals and prefer routes likely to reach your thresholds.
             Every bred intermediate must meet these floors; IV rerolls are included in expected
-            egg totals.
+            hatch totals, including selected cake modifiers.
           </p>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {ivField('hp', 'HP IV')}

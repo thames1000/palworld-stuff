@@ -15,6 +15,7 @@ import {
   speciesName,
   SPECIES,
 } from '../core/data/index.js';
+import { CAKES, parseCakeVariant } from '../core/solver/cakes.js';
 import { solve, speciesLeadingTo } from '../core/solver/search.js';
 import type { OptimizationMode, TargetSpec } from '../core/solver/types.js';
 import {
@@ -100,6 +101,7 @@ Target:
   --min-hp N                Minimum HP IV (0-100)
   --min-attack N            Minimum Attack IV
   --min-defense N           Minimum Defense IV
+  --cake <variant>          cake | mushroom | vegetable | extravagant | special
 
 Search:
   --mode <mode>             generations | eggs | clean | balanced   (default: balanced)
@@ -245,6 +247,14 @@ async function main(): Promise<number> {
     return 1;
   }
 
+  const cake = parseCakeVariant(str(args, 'cake'));
+  if (!cake) {
+    console.error(
+      `Unknown --cake "${str(args, 'cake')}". Valid: ${CAKES.map((c) => c.aliases[0]).join(', ')}.`,
+    );
+    return 1;
+  }
+
   const spec: TargetSpec = {
     speciesIndex,
     requiredPassives,
@@ -259,6 +269,7 @@ async function main(): Promise<number> {
     mode: modeArg,
     beamSize: num(args, 'beam', 1200),
     allowExcludedParents: bool(args, 'allow-excluded-parents'),
+    cake,
   };
 
   const result = solve(pals, spec);

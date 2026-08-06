@@ -8,7 +8,7 @@
  * per state is kept, and a beam of the most promising nodes is carried into the next
  * round so the pairwise step stays tractable.
  *
- * Modelling assumptions, stated plainly because they drive the egg estimates:
+ * Modelling assumptions, stated plainly because they drive the hatch estimates:
  *  - An owned Pal's parent pool is its real passive list, junk included. A Pal with four
  *    passives is genuinely a poor parent and the math reflects that.
  *  - A *bred* intermediate is assumed to carry only the passives the plan wants from it.
@@ -21,6 +21,7 @@
 import { MECHANICS, SPECIES } from '../data/index.js';
 import { breedingResult, isReachable, minBreedingSteps } from '../data/breeding.js';
 import type { Pal } from '../save/types.js';
+import { ivRollModelForCake } from './cakes.js';
 import { breedingStep, leavesCanBreed } from './pairing.js';
 import {
   childIvDistribution,
@@ -80,6 +81,7 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
   const excluded = new Set(spec.excludedPassives.map((p) => p.toLowerCase()));
   const thresholds = thresholdVector(spec);
   const wantsIvs = thresholds.some((t) => t != null && t > 0);
+  const ivRollModel = ivRollModelForCake(spec.cake);
 
   // --- candidate pool -------------------------------------------------------
   let candidates = pals;
@@ -251,7 +253,12 @@ export function solve(pals: Pal[], spec: TargetSpec): SolveResult {
         const step = breedingStep(a, b, childMask);
         if (step.successPerEgg <= 0) continue;
 
-        const inheritedIvs = childIvDistribution(a.ivDistribution!, b.ivDistribution!, thresholds);
+        const inheritedIvs = childIvDistribution(
+          a.ivDistribution!,
+          b.ivDistribution!,
+          thresholds,
+          ivRollModel,
+        );
         const ivStepSuccess = wantsIvs ? ivSuccessProbability(inheritedIvs, thresholds) : 1;
         if (ivStepSuccess <= 0) continue;
         // A bred intermediate is retained only when it meets every requested floor. Once

@@ -35,6 +35,7 @@ function defaultSpec(): TargetSpec {
     mode: 'balanced',
     beamSize: 1200,
     allowExcludedParents: false,
+    cake: 'standard',
   };
 }
 

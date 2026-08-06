@@ -30,6 +30,13 @@ const P_IV_INHERIT_COUNT = normalize(MECHANICS.ivInheritanceWeights);
  */
 export type IvDistribution = readonly [number, number, number, number, number, number, number, number];
 
+export interface IvRollModel {
+  /** Minimum bonus added to a fresh IV roll before checking the requested threshold. */
+  freshBonusMin?: number;
+  /** Maximum bonus added to a fresh IV roll before checking the requested threshold. */
+  freshBonusMax?: number;
+}
+
 function emptyIvDistribution(): number[] {
   return Array<number>(8).fill(0);
 }
@@ -69,6 +76,7 @@ export function childIvDistribution(
   parentA: IvDistribution,
   parentB: IvDistribution,
   thresholds: readonly (number | null)[],
+  model: IvRollModel = {},
 ): IvDistribution {
   const requiredMask = requiredIvMask(thresholds);
   if (requiredMask === 0) return knownIvDistribution([], thresholds);
@@ -97,7 +105,7 @@ export function childIvDistribution(
                   ((maskB & (1 << stat)) !== 0 ? 1 : 0)) /
                 2;
             } else {
-              passChance[stat] = Math.max(0, (100 - thresholds[stat]! + 1) / 101);
+              passChance[stat] = freshIvSuccessProbability(thresholds[stat]!, model);
             }
           }
 
@@ -117,6 +125,17 @@ export function childIvDistribution(
     }
   }
   return out as unknown as IvDistribution;
+}
+
+function freshIvSuccessProbability(threshold: number, model: IvRollModel): number {
+  const min = Math.max(0, Math.floor(model.freshBonusMin ?? 0));
+  const max = Math.max(min, Math.floor(model.freshBonusMax ?? min));
+  let probability = 0;
+  for (let bonus = min; bonus <= max; bonus++) {
+    const effectiveThreshold = Math.max(0, threshold - bonus);
+    probability += Math.max(0, Math.min(1, (100 - effectiveThreshold + 1) / 101));
+  }
+  return probability / (max - min + 1);
 }
 
 export function ivSuccessProbability(
@@ -206,11 +225,13 @@ export function ivProbability(
   parentA: readonly number[],
   parentB: readonly number[],
   thresholds: readonly (number | null)[],
+  model: IvRollModel = {},
 ): number {
   const distribution = childIvDistribution(
     knownIvDistribution(parentA, thresholds),
     knownIvDistribution(parentB, thresholds),
     thresholds,
+    model,
   );
   return ivSuccessProbability(distribution, thresholds);
 }

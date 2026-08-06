@@ -21,7 +21,7 @@ export interface PlanStep {
   /** Bitmask of the target's required passives this child must end up with. */
   mask: number;
   parents: [PlanStepRef, PlanStepRef];
-  /** Expected eggs for this step alone. */
+  /** Expected hatches for this step alone. */
   expectedEggs: number;
   /**
    * Chance a hatch carries every passive this step wants.

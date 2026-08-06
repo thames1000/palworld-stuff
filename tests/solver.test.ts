@@ -2,12 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   findPassive,
   findSpecies,
+  SPECIES,
   passiveColorTier,
   speciesIconUrl,
   speciesName,
 } from '../src/core/data/index.js';
 import { renderPlanMermaid, renderPlanMermaidModel } from '../src/core/solver/diagram.js';
 import { breedingResult, parentPairsFor } from '../src/core/data/breeding.js';
+import {
+  expectedProductionCycles,
+  ivRollModelForCake,
+  parseCakeVariant,
+} from '../src/core/solver/cakes.js';
 import { solve } from '../src/core/solver/search.js';
 import { flattenPlan, type PlanStep } from '../src/core/solver/steps.js';
 import {
@@ -19,6 +25,15 @@ import {
   passiveInheritanceProbability,
   requiredIvMask,
 } from '../src/core/solver/probability.js';
+import {
+  expectedMutationCount,
+  hatchesForMutationConfidence,
+  mutationChanceAfterHatches,
+  mutationChancePerHatch,
+  mutationParentsForChild,
+  mutationResultChanceForChild,
+  mutationResultsForPair,
+} from '../src/core/solver/mutations.js';
 import type { PlanNode, TargetSpec } from '../src/core/solver/types.js';
 import type { Gender, Pal } from '../src/core/save/types.js';
 
@@ -114,6 +129,14 @@ function bredNode(
 }
 
 describe('probability model', () => {
+  it('recognises cake aliases and the exact Vegetable Cake production multiplier', () => {
+    expect(parseCakeVariant('vegetable')).toBe('vegetable');
+    expect(parseCakeVariant('deluxe')).toBe('extravagant-vegetable');
+    expect(parseCakeVariant('Extravagant Vegetable Cake')).toBe('extravagant-vegetable');
+    expect(expectedProductionCycles(7, 'vegetable')).toBe(3.5);
+    expect(expectedProductionCycles(7, 'mushroom')).toBe(7);
+  });
+
   it('computes hypergeometric passive inheritance from the datamined weights', () => {
     // Pool of exactly the two wanted passives: any draw of 2+ takes both.
     expect(passiveInheritanceProbability(2, 2)).toBeCloseTo(0.6, 6);
@@ -155,6 +178,53 @@ describe('probability model', () => {
       12,
     );
     expect(child.reduce((sum, probability) => sum + probability, 0)).toBeCloseTo(1, 12);
+  });
+
+  it('applies IV-focused cake bonuses to fresh IV rolls', () => {
+    const thresholds = [90, 90, 90];
+    const parentA = [100, 10, 10];
+    const parentB = [100, 20, 20];
+    const standard = ivProbability(parentA, parentB, thresholds, ivRollModelForCake('standard'));
+    const mushroom = ivProbability(parentA, parentB, thresholds, ivRollModelForCake('mushroom'));
+    const extravagant = ivProbability(
+      parentA,
+      parentB,
+      thresholds,
+      ivRollModelForCake('extravagant-vegetable'),
+    );
+
+    expect(mushroom).toBeGreaterThan(standard);
+    expect(extravagant).toBeGreaterThan(standard);
+    expect(mushroom).toBeCloseTo(extravagant, 12);
+  });
+
+  it('calculates breeding mutation odds from per-hatch chances', () => {
+    expect(mutationChancePerHatch('standard')).toBe(0.01);
+    expect(mutationChancePerHatch('vegetable')).toBe(0.01);
+    expect(mutationChancePerHatch('extravagant-vegetable')).toBe(0.03);
+    expect(mutationChanceAfterHatches(100, 0.01)).toBeCloseTo(1 - 0.99 ** 100, 12);
+    expect(expectedMutationCount(100, 0.03)).toBeCloseTo(3, 12);
+    expect(hatchesForMutationConfidence(0.01, 0.5)).toBe(69);
+    expect(hatchesForMutationConfidence(0.03, 0.5)).toBe(23);
+  });
+
+  it('models possible mutated children and reverse mutation parents', () => {
+    const rayhound = findSpecies('Rayhound');
+    const foxcicle = findSpecies('Foxcicle');
+    const majex = findSpecies('Majex');
+    const solmoraLux = findSpecies('Solmora Lux');
+
+    const results = mutationResultsForPair(rayhound, foxcicle);
+    expect(results.map((result) => result.speciesIndex)).toContain(majex);
+    expect(results.map((result) => result.speciesIndex)).toContain(solmoraLux);
+    expect(results.every((result) => result.relativeChance > 0)).toBe(true);
+    expect(results.every((result) => SPECIES[result.speciesIndex].breedingPower < SPECIES[rayhound].breedingPower)).toBe(true);
+
+    const majexParents = mutationParentsForChild(majex);
+    expect(majexParents.selfPairs.length).toBeGreaterThan(0);
+    expect(majexParents.totalPairs).toBeGreaterThan(majexParents.selfPairs.length);
+    expect(majexParents.partnersOf(rayhound)).toContain(foxcicle);
+    expect(mutationResultChanceForChild(rayhound, foxcicle, majex)).toBeGreaterThan(0);
   });
 
   it('carries IV threshold odds through bred parents', () => {
@@ -285,6 +355,31 @@ describe('solver', () => {
     expect(diagram).toContain('pal_0 --> step_1');
     expect(diagram).toContain('pal_2 --> step_2');
     expect(diagram).not.toContain('pal_0 --> step_2');
+  });
+
+  it('includes cake-adjusted production cycles in Mermaid labels', () => {
+    const target = spec({ cake: 'vegetable' });
+    const steps: PlanStep[] = [
+      {
+        index: 1,
+        speciesIndex: findSpecies('Anubis'),
+        mask: 3,
+        parents: [
+          { kind: 'owned', pal: makePal('Relaxaurus Lux', 'Male', ['Artisan']) },
+          { kind: 'owned', pal: makePal('Jormuntide Ignis', 'Female', ['Serious']) },
+        ],
+        expectedEggs: 4,
+        passiveSuccess: 0.25,
+        genderFactor: 1,
+        genderRequirement: null,
+        expectedUnwanted: 0,
+        isFinal: true,
+      },
+    ];
+
+    const diagram = renderPlanMermaidModel(steps, target).source;
+    expect(diagram).toContain('~4.0 hatches');
+    expect(diagram).toContain('~2.0 cake cycles');
   });
 
   it('collapses repeated bred subtrees into a made-earlier Pal reference', () => {
@@ -537,6 +632,27 @@ describe('solver', () => {
     expect(ownedIds).toContain(high.instanceId);
     expect(ownedIds).not.toContain(low.instanceId);
     expect(result.finalIvProbability).toBeGreaterThan(0);
+  });
+
+  it('uses IV cake bonuses when estimating solver hatch counts', () => {
+    const pals = [
+      makePal('Relaxaurus Lux', 'Male', [], [100, 10, 10]),
+      makePal('Jormuntide Ignis', 'Female', [], [100, 20, 20]),
+    ];
+    const target = {
+      requiredPassives: [],
+      minIvs: { hp: 90, attack: 90, defense: 90 },
+      maxGenerations: 1,
+      mode: 'eggs' as const,
+    };
+
+    const standard = solve(pals, spec({ ...target, cake: 'standard' }));
+    const mushroom = solve(pals, spec({ ...target, cake: 'mushroom' }));
+
+    expect(standard.plan).not.toBeNull();
+    expect(mushroom.plan).not.toBeNull();
+    expect(mushroom.finalIvProbability!).toBeGreaterThan(standard.finalIvProbability!);
+    expect(mushroom.plan!.stepEggs).toBeLessThan(standard.plan!.stepEggs);
   });
 
   it('reports no-pals rather than crashing on an empty Palbox', () => {

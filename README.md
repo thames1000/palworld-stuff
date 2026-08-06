@@ -51,15 +51,17 @@ only `Level.sav` you still get every Pal, but locations degrade to raw container
 The UI has three surfaces:
 
 - **Plan** — target builder on the left (species, required and excluded passives, IV floors,
-  gender, generation cap, optimisation mode), plan on the right: a verdict banner, a
+  cake variant, gender, generation cap, optimisation mode), plan on the right: a verdict banner, a
   rendered Mermaid diagram with Pal icons, then numbered steps showing each parent,
-  where to find it, what to keep, and expected eggs. The diagram can be copied as Mermaid
-  or SVG.
+  where to find it, what to keep, expected hatches, and cake-adjusted production cycles.
+  The diagram can be copied as Mermaid or SVG.
 - **Pals** — every Pal in scope, searchable by species, nickname or passive, filterable by
   gender, location and IV floor, sortable by any column. Click a species to make it the plan
   target. Without a save, this is where you enter the Pals you own instead.
 - **Explore** — build a route yourself rather than having one solved for you. See
-  [Planning without a save](#planning-without-a-save).
+  [Planning without a save](#planning-without-a-save). It also includes a mutation calculator
+  for comparing cake odds across hatches and production cycles, plus forward and reverse
+  mutation lookups for parent pairs and desired mutated children.
 
 Parsing and solving run in a Web Worker, so a large save never freezes the page.
 
@@ -73,7 +75,7 @@ save *is* loaded.
 and fill in gender, passives and — if you know them — IVs, so each entry arrives complete
 and the list stays a scannable one-line-per-Pal summary however long it gets. *Add and enter
 another* keeps the dialog open on the same species for entering a run of them. That roster
-feeds the same solver the save-file path uses, so the verdicts, egg estimates and step lists
+feeds the same solver the save-file path uses, so the verdicts, hatch estimates and step lists
 are the ones you would get from a save.
 
 **Explore** is the reverse of the solver. You start from the Pal you want and, for each
@@ -82,7 +84,10 @@ list of parent pairs that produce that species, with the ones you can field righ
 sorted to the top. Every pairing is checked against the breeding table as you go, so a
 branch that no longer produces what the slot claims says so rather than quietly breaking
 the plan. The egg and passive math is shared with the automatic search, so a hand-built
-route and a solved one are directly comparable. There is also a plain `A × B = ?` lookup.
+route and a solved one are directly comparable. There is also a plain `A × B = ?` lookup,
+plus mutation tools that estimate the odds of at least one mutated hatch for each cake
+choice, show possible mutated children for a selected parent pair, and list same-species
+or narrowed mixed-parent options for a desired mutated Pal.
 
 **Carrying a roster between browsers.** *Export* writes the list to a `.json` file (or copies
 it to the clipboard); *Import* takes that file back, or pasted text, and either adds it to
@@ -124,6 +129,7 @@ a save; hand-entered rosters and manual routes are web-app features.
 | `--exclude a,b` | Passives the result must not have |
 | `--gender Male\|Female` | Required gender of the result |
 | `--min-hp/--min-attack/--min-defense N` | IV thresholds |
+| `--cake <variant>` | `cake` \| `mushroom` \| `vegetable` \| `extravagant` \| `special` |
 | `--mode` | `generations` \| `eggs` \| `clean` \| `balanced` (default) |
 | `--max-generations N` | Depth limit for the tree (default 5) |
 | `--beam N` | Nodes carried per round; higher is slower and more thorough (default 1200) |
@@ -181,7 +187,7 @@ can no longer reach the target in the generations remaining.
 
 ### Modelling assumptions
 
-These drive the egg estimates, so they are worth knowing:
+These drive the hatch and production-cycle estimates, so they are worth knowing:
 
 - An **owned** Pal's parent pool is its real passive list, junk included. A Pal with four
   passives genuinely is a poor parent and the math reflects that.
@@ -197,6 +203,12 @@ These drive the egg estimates, so they are worth knowing:
   "per hatch" figure, which would read as though the egg might hatch the wrong species.
 - Fresh IV rolls are treated as uniform over 0–100, approximating the game's real roll
   distribution.
+- Cake variants are shown as strategy context. Vegetable Cake has a known exact production
+  effect, so PalForge reports two eggs per breeding cycle and halves the expected cycle
+  count. Mushroom and Extravagant Vegetable Cake are included in IV odds with an explicit
+  estimated +1 to +5 fresh-IV uplift, matching the public "higher stat talents" wording
+  without pretending to know hidden weights. Mutation odds and Special Cake passive-weight
+  changes are still reported as strategy notes until exact numbers are available.
 - A hand-entered Pal is modelled exactly like a save-file one. Where a value cannot
   reasonably be typed from memory it is filled in neutrally — unknown IVs count as 50, and a
   Pal with no gender set is treated as able to pair with anything, which is optimistic.
@@ -208,13 +220,13 @@ These drive the egg estimates, so they are worth knowing:
 
 Implemented: save import (PlZ/PlM/CNK), player and guild selection, species/gender/passive/
 IV/skill/location extraction, owned-only route search, reachability reporting, route
-ranking, full plan output with Palbox locations, hand-entered rosters, hand-built routes
-with reverse parent-pair lookup, and both front-ends.
+ranking, full plan output with Palbox locations, cake selection, hand-entered rosters,
+hand-built routes with reverse parent-pair lookup, and both front-ends.
 
-Not yet implemented: mutation routes, Cake selection and resource costs, active-skill
-inheritance as a search constraint, incubation-time optimisation, and shareable plan links.
+Not yet implemented: mutation routes inside the automatic solver, cake resource costs,
+active-skill inheritance as a search constraint, incubation-time optimisation, and shareable plan links.
 IV thresholds are carried through the search. Every bred intermediate must meet the requested
-floors, and its IV rerolls are included in the expected egg cost. Hand-built routes are not
+floors, and its IV rerolls are included in the expected hatch cost. Hand-built routes are not
 checked for whether you own enough copies of a Pal to run two branches at once.
 
 ## Layout

@@ -1,6 +1,7 @@
 /** Results panel: the verdict, then the step-by-step plan. */
 import { passiveDisplayName, speciesName } from '@core/data/index';
 import type { Pal } from '@core/save/types';
+import { cakeInfo, cakeIvBonusLabel, cakeNotes, expectedProductionCycles } from '@core/solver/cakes';
 import { maskedPassives, type PlanStep, type PlanStepRef } from '@core/solver/steps';
 import type { Feasibility, TargetSpec } from '@core/solver/types';
 import type { SolveSummary } from '../worker/protocol';
@@ -95,7 +96,8 @@ function sameSpec(a: TargetSpec, b: TargetSpec): boolean {
     a.maxGenerations === b.maxGenerations &&
     a.mode === b.mode &&
     a.beamSize === b.beamSize &&
-    a.allowExcludedParents === b.allowExcludedParents
+    a.allowExcludedParents === b.allowExcludedParents &&
+    cakeInfo(a.cake).id === cakeInfo(b.cake).id
   );
 }
 
@@ -125,6 +127,7 @@ function TargetSummary({ spec }: { spec: TargetSpec }) {
         )}
       </div>
       {ivs && <div className="nums mt-2 text-xs text-ink-1">IV floors: {ivs}</div>}
+      <div className="mt-2 text-xs text-ink-1">Cake: {cakeInfo(spec.cake).label}</div>
     </div>
   );
 }
@@ -133,13 +136,18 @@ export function StepCard({
   step,
   required,
   minIvs,
+  cake,
 }: {
   step: PlanStep;
   required: string[];
   minIvs?: TargetSpec['minIvs'];
+  cake?: TargetSpec['cake'];
 }) {
   const keep = maskedPassives(step.mask, required);
   const floors = minIvs ?? { hp: null, attack: null, defense: null };
+  const cakeDetails = cakeInfo(cake);
+  const cycles = expectedProductionCycles(step.expectedEggs, cake);
+  const ivBonus = cakeIvBonusLabel(cakeDetails.id);
   const ivKeep = [
     floors.hp != null && floors.hp > 0 ? `HP ≥ ${floors.hp}` : null,
     floors.attack != null && floors.attack > 0 ? `Attack ≥ ${floors.attack}` : null,
@@ -159,7 +167,8 @@ export function StepCard({
           {step.isFinal && <span className="ml-2 text-accent">final</span>}
         </span>
         <span className="nums text-[11px] text-ink-2">
-          ~{step.expectedEggs.toFixed(1)} eggs · {odds.hatch}
+          ~{step.expectedEggs.toFixed(1)} hatches
+          {cakeDetails.eggsPerCycle > 1 ? ` · ~${cycles.toFixed(1)} cycles` : ''} · {odds.hatch}
           {ivKeep.length > 0 && step.ivSuccess != null
             ? ` · ${(step.ivSuccess * 100).toFixed(1)}% IVs`
             : ''}
@@ -191,6 +200,29 @@ export function StepCard({
             Keep only if its IVs are <span className="nums text-ink-0">{ivKeep.join(', ')}</span>.
           </p>
         )}
+        {cakeDetails.id === 'vegetable' && (
+          <p className="mt-1 text-[11px] text-good">
+            Vegetable Cake turns this into about{' '}
+            <span className="nums">{Math.ceil(cycles).toLocaleString()} production cycle(s)</span>.
+          </p>
+        )}
+        {cakeDetails.id === 'mushroom' && ivKeep.length > 0 && (
+          <p className="mt-1 text-[11px] text-good">
+            Mushroom Cake is included in these IV odds as an estimated {ivBonus} fresh-IV uplift.
+          </p>
+        )}
+        {cakeDetails.id === 'extravagant-vegetable' && (
+          <p className="mt-1 text-[11px] text-ink-2">
+            {ivKeep.length > 0
+              ? `Extravagant Vegetable Cake includes an estimated ${ivBonus} fresh-IV uplift; mutation odds are not part of the hatch estimate yet.`
+              : 'Extravagant Vegetable Cake is the mutation-focused choice; mutation odds are not part of the hatch estimate yet.'}
+          </p>
+        )}
+        {cakeDetails.id === 'special' && keep.length > 1 && (
+          <p className="mt-1 text-[11px] text-ink-2">
+            Special Cake supports multi-passive inheritance; shown passive odds use base weights.
+          </p>
+        )}
         {step.expectedUnwanted >= 0.5 && (
           <p className="mt-1 text-[11px] text-ink-2">
             Expect ~{step.expectedUnwanted.toFixed(1)} unwanted passive(s) to tag along.
@@ -218,6 +250,8 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
   const verdict = VERDICTS[summary.feasibility];
   const solvedSpec = summary.spec;
   const stale = !sameSpec(solvedSpec, spec);
+  const cake = cakeInfo(solvedSpec.cake);
+  const notes = cakeNotes(solvedSpec);
 
   return (
     <div className="space-y-4">
@@ -237,12 +271,21 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
       </div>
 
       {summary.steps.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <Stat label="Steps" value={summary.steps.length} />
           <Stat label="Generations" value={summary.generations ?? '—'} />
           <Stat
-            label="Expected eggs"
+            label="Expected hatches"
             value={summary.totalEggs != null ? Math.ceil(summary.totalEggs) : '—'}
+          />
+          <Stat
+            label="Production cycles"
+            value={
+              summary.totalEggs != null
+                ? Math.ceil(expectedProductionCycles(summary.totalEggs, solvedSpec.cake))
+                : '—'
+            }
+            tone={cake.eggsPerCycle > 1 ? 'text-good' : undefined}
           />
           <Stat label="Pals in scope" value={summary.candidateCount.toLocaleString()} />
         </div>
@@ -282,6 +325,7 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
               step={step}
               required={solvedSpec.requiredPassives}
               minIvs={solvedSpec.minIvs}
+              cake={solvedSpec.cake}
             />
           ))}
         </ol>
@@ -305,7 +349,7 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
                     <span className="text-xs text-ink-2">none of the target passives</span>
                   )}
                   <span className="nums ml-auto text-[11px] text-ink-2">
-                    {alt.generations} gen · ~{Math.ceil(alt.totalEggs)} eggs
+                    {alt.generations} gen · ~{Math.ceil(alt.totalEggs)} hatches
                   </span>
                 </li>
               );
@@ -314,7 +358,7 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
         </Panel>
       )}
 
-      {(summary.diagnostics.length > 0 || summary.finalIvProbability != null) && (
+      {(summary.diagnostics.length > 0 || summary.finalIvProbability != null || cake.id !== 'standard') && (
         <Panel title="Notes">
           <ul className="space-y-1.5 text-xs text-ink-1">
             {summary.finalIvProbability != null && (
@@ -323,9 +367,22 @@ export function PlanView({ summary, spec }: { summary: SolveSummary | null; spec
                 <span className="nums text-ink-0">
                   {(summary.finalIvProbability * 100).toFixed(1)}%
                 </span>{' '}
-                per hatch. This chance is included in the final step's expected eggs.
+                per hatch with the selected cake. This chance is included in the final step's
+                expected hatch total.
               </li>
             )}
+            {cake.id !== 'standard' && (
+              <li>
+                Cake strategy:{' '}
+                <span className="text-ink-0">
+                  {cake.label} ({cake.focus})
+                </span>
+                .
+              </li>
+            )}
+            {notes.map((note, i) => (
+              <li key={`cake-${i}`}>{note}</li>
+            ))}
             {solvedSpec.gender && (
               <li>
                 Chance the final hatch is {solvedSpec.gender}:{' '}

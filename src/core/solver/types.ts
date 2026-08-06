@@ -6,6 +6,13 @@ export type { GenderRequirement } from './pairing.js';
 
 export type OptimizationMode = 'generations' | 'eggs' | 'clean' | 'balanced';
 
+export type CakeVariant =
+  | 'standard'
+  | 'mushroom'
+  | 'vegetable'
+  | 'extravagant-vegetable'
+  | 'special';
+
 export interface IvThresholds {
   hp: number | null;
   attack: number | null;
@@ -26,6 +33,8 @@ export interface TargetSpec {
   beamSize: number;
   /** Allow Pals carrying an excluded passive to be used as parents. */
   allowExcludedParents: boolean;
+  /** Breeding-farm cake variant used for this plan. Omitted means the original Cake. */
+  cake?: CakeVariant;
 }
 
 export interface PlanNode {
@@ -36,7 +45,7 @@ export interface PlanNode {
   generation: number;
   /** Distinct passives assumed present when this node acts as a parent. */
   poolSize: number;
-  /** Expected eggs for this step's passive and IV keep rules. 0 for an owned Pal. */
+  /** Expected hatches for this step's passive and IV keep rules. 0 for an owned Pal. */
   stepEggs: number;
   /**
    * Chance a hatch at this step carries every wanted passive.
@@ -53,7 +62,7 @@ export interface PlanNode {
    */
   genderFactor: number;
   genderRequirement: GenderRequirement | null;
-  /** Expected eggs for this whole subtree, including this step. */
+  /** Expected hatches for this whole subtree, including this step. */
   totalEggs: number;
   /** Expected junk passives on this node's Pal. */
   expectedUnwanted: number;

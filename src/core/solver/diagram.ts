@@ -7,6 +7,7 @@ import {
   type PassiveColorTier,
 } from '../data/index.js';
 import type { Pal } from '../save/types.js';
+import { cakeInfo, expectedProductionCycles } from './cakes.js';
 import { maskedPassives, type PlanStep, type PlanStepRef } from './steps.js';
 import type { TargetSpec } from './types.js';
 
@@ -64,10 +65,13 @@ function ownedLabel(pal: Pal): string {
   ]);
 }
 
-function stepLabel(step: PlanStep): string {
+function stepLabel(step: PlanStep, spec: TargetSpec): string {
+  const cake = cakeInfo(spec.cake);
+  const cycles = expectedProductionCycles(step.expectedEggs, spec.cake);
   return label([
     `Step ${step.index}${step.isFinal ? ' final' : ''}: ${speciesName(step.speciesIndex)}`,
-    `~${step.expectedEggs.toFixed(1)} eggs`,
+    `~${step.expectedEggs.toFixed(1)} hatches`,
+    cake.eggsPerCycle > 1 ? `~${cycles.toFixed(1)} cake cycles` : null,
   ]);
 }
 
@@ -159,7 +163,7 @@ export function renderPlanMermaidModel(
       icons,
       child,
       step.speciesIndex,
-      stepLabel(step),
+      stepLabel(step, spec),
       maskedPassives(step.mask, spec.requiredPassives),
       tone,
     );
