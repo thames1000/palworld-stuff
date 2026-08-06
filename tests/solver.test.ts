@@ -227,6 +227,29 @@ describe('probability model', () => {
     expect(mutationResultChanceForChild(rayhound, foxcicle, majex)).toBeGreaterThan(0);
   });
 
+  it('excludes Palpedia ignore-combi species from mutation result pools', () => {
+    const broncherry = findSpecies('Broncherry');
+    const blazamut = findSpecies('Blazamut');
+    const bellanoir = findSpecies('Bellanoir');
+    const warsectTerra = findSpecies('Warsect Terra');
+    const wumpoBotan = findSpecies('Wumpo Botan');
+    const reptyroCryst = findSpecies('Reptyro Cryst');
+    const jormuntide = findSpecies('Jormuntide');
+
+    const results = mutationResultsForPair(broncherry, blazamut);
+    expect(results.map((result) => result.speciesIndex)).not.toContain(bellanoir);
+    expect(results.map((result) => result.speciesIndex)).toEqual([
+      warsectTerra,
+      wumpoBotan,
+      reptyroCryst,
+      jormuntide,
+    ]);
+    expect(mutationResultChanceForChild(broncherry, blazamut, warsectTerra)).toBeCloseTo(15 / 41 * 100, 12);
+    expect(mutationResultChanceForChild(broncherry, blazamut, wumpoBotan)).toBeCloseTo(15 / 41 * 100, 12);
+    expect(mutationResultChanceForChild(broncherry, blazamut, reptyroCryst)).toBeCloseTo(10 / 41 * 100, 12);
+    expect(mutationResultChanceForChild(broncherry, blazamut, jormuntide)).toBeCloseTo(1 / 41 * 100, 12);
+  });
+
   it('carries IV threshold odds through bred parents', () => {
     const thresholds = [90, 90, 90];
     const firstGeneration = childIvDistribution(

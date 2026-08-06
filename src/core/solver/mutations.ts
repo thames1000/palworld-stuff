@@ -11,6 +11,41 @@ const MUTATION_RANK_COEFFICIENT = 0.5;
 const MUTATION_RANK_DIFF_PENALTY = 0.4;
 const MUTATION_RANDOM_COEFFICIENT = 0.1;
 
+/**
+ * Pals Palpedia marks `ignoreCombi`, meaning they can exist in breeding data but should not
+ * appear as mutated-egg result species. PalForge's current generated table does not carry
+ * that flag, so keep this small compatibility list until the data generator imports it.
+ */
+const MUTATION_RESULT_EXCLUDED_INTERNAL_NAMES = new Set([
+  'BlackCentaur',
+  'BlackGriffon',
+  'BlueSkyDragon',
+  'DarkAlien',
+  'DarkMechaDragon',
+  'ElecPanda',
+  'FlowerPrince',
+  'Horus',
+  'Horus_Water',
+  'IceHorse',
+  'IceHorse_Dark',
+  'JetDragon',
+  'KingBahamut_Dragon',
+  'KingWhale',
+  'LegendDeer',
+  'LilyQueen',
+  'LilyQueen_Dark',
+  'MimicDog',
+  'MoonQueen',
+  'Mothman',
+  'NightLady',
+  'NightLady_Dark',
+  'PoseidonOrca',
+  'SaintCentaur',
+  'SnowTigerBeastman',
+  'ThunderDragonMan',
+  'WhiteAlienDragon',
+]);
+
 export interface MutationResult {
   speciesIndex: number;
   /** Share of this pair's mutation-result score range, not chance per produced egg. */
@@ -65,7 +100,12 @@ function mutationRounded(value: number): number {
 function mutationTiePriority(index: number): number {
   const species = SPECIES[index];
   if (!species) return -Infinity;
-  return species.rarity * 1000 + (species.isVariant ? 100 : 0) - species.paldexNo;
+  return (
+    species.breedingPower * 10000 +
+    species.rarity * 100 +
+    (species.isVariant ? 10 : 0) -
+    species.paldexNo / 1000
+  );
 }
 
 function speciesAt(index: number) {
@@ -95,9 +135,18 @@ export function isMutationBreedableSpecies(index: number): boolean {
   return Boolean(species && Number.isFinite(species.breedingPower) && breedingResult(index, index) === index);
 }
 
+export function isMutationResultSpecies(index: number): boolean {
+  const species = SPECIES[index];
+  return Boolean(
+    species &&
+      isMutationBreedableSpecies(index) &&
+      !MUTATION_RESULT_EXCLUDED_INTERNAL_NAMES.has(species.internalName),
+  );
+}
+
 export function mutationSpecies(): readonly number[] {
   mutationSpeciesCache ??= SPECIES.map((_, index) => index)
-    .filter(isMutationBreedableSpecies)
+    .filter(isMutationResultSpecies)
     .sort(byMutationRank);
   return mutationSpeciesCache;
 }
