@@ -296,6 +296,24 @@ describe('planning without a save', () => {
     expect(html).toContain('My Pals (1)');
   });
 
+  it('lets a manual roster be searched, filtered and sorted once it has entries', () => {
+    const html = renderToString(
+      <RosterEditor plan={manualPlanState({ roster: [manualSpec] })} />,
+    ).replaceAll('<!-- -->', '');
+    expect(html).toContain('Search species, nickname or passive...');
+    expect(html).toContain('Any gender');
+    expect(html).toContain('Best IV');
+    expect(html).toContain('Newest first');
+    expect(html).toContain('1 of 1 Pal');
+  });
+
+  it('can use a hand-entered Pal species as the current planning target', () => {
+    const html = renderToString(
+      <RosterEditor plan={manualPlanState({ roster: [manualSpec] })} onUseAsTarget={() => {}} />,
+    ).replaceAll('<!-- -->', '');
+    expect(html).toContain('Use as the plan target');
+  });
+
   it('gathers a whole Pal in the add dialog before it joins the list', () => {
     const html = renderToString(
       <PalDialog initial={manualSpec} mode="add" onSubmit={() => {}} onCancel={() => {}} />,

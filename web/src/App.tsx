@@ -226,7 +226,13 @@ export default function App() {
 
         {tab === 'pals' &&
           (manualMode ? (
-            <RosterEditor plan={manual} />
+            <RosterEditor
+              plan={manual}
+              onUseAsTarget={(speciesIndex) => {
+                setSpec((s) => ({ ...s, speciesIndex }));
+                setTab('plan');
+              }}
+            />
           ) : (
             <PalTable
               pals={pool}
